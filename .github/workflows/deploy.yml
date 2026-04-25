@@ -1,0 +1,59 @@
+name: Generate & Deploy Dashboard
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # 平日 日本時間 7:00 (UTC 22:00 前日) と 23:30 (UTC 14:30) の2回更新
+    - cron: '0 22 * * 0-4'   # 月〜金 07:00 JST（寄り付き前）
+    - cron: '30 14 * * 1-5'  # 月〜金 23:30 JST（米国市場クローズ後）
+  workflow_dispatch:           # 手動実行ボタン
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+
+      - name: Generate dashboard.html
+        run: python generate.py
+
+      - name: Prepare site (dashboard.html → index.html)
+        run: |
+          mkdir _site
+          cp dashboard.html _site/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
