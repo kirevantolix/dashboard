@@ -36,7 +36,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install yfinance pandas requests
+        run: pip install -r requirements.txt
 
       - name: Generate dashboard.html
         run: python generate.py
