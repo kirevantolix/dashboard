@@ -41,10 +41,13 @@ jobs:
       - name: Generate dashboard.html
         run: python generate.py
 
-      - name: Prepare site (dashboard.html → index.html)
+      - name: Prepare site
         run: |
           mkdir _site
+          # index.html → ルートURL (username.github.io/repo/) で開ける
           cp dashboard.html _site/index.html
+          # dashboard.html → 元のURLでも開ける
+          cp dashboard.html _site/dashboard.html
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
