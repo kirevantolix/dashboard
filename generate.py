@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
 """US Stock Watchlist Dashboard Generator
 Usage: python generate.py
-Reads watchlist.txt, fetches data via yfinance, generates dashboard.html
 """
 
 import yfinance as yf
 import pandas as pd
-import requests
 import json
 import math
-from datetime import datetime
-import xml.etree.ElementTree as ET
+from datetime import datetime, timezone, timedelta
+
+# ── Tickers ────────────────────────────────────────────────────────────────────
+
+TICKERS = [
+    'ARM', 'AMD', 'SOXL', 'LPTH', 'TECL', 'NBIS', 'SNDK', 'TSM', 'CRDO',
+    'NVDA', 'NUGT', 'LITE', 'AMZN', 'MU', 'IREN', 'EWY', 'META', 'OSCR',
+    'ZM', 'MSFT', 'QQQ', 'HOOD', 'GOOG', 'APP',
+]
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -43,37 +48,6 @@ def detect_crosses(ma_s, ma_l, lookback=5):
     rec = set(range(max(0, n - lookback), n))
     return gc_idx, dc_idx, bool(rec & set(gc_idx)), bool(rec & set(dc_idx))
 
-def sentiment(text):
-    t = text.lower()
-    pos = sum(1 for w in [
-        'surge', 'gain', 'rise', 'beat', 'growth', 'profit', 'strong',
-        'rally', 'boost', 'soar', 'jump', 'upgrade', 'record', 'outperform',
-        'tops', 'high', 'positive', 'bullish', 'buy', 'wins'
-    ] if w in t)
-    neg = sum(1 for w in [
-        'fall', 'drop', 'decline', 'miss', 'loss', 'weak', 'crash', 'plunge',
-        'cut', 'warn', 'risk', 'fear', 'concern', 'downgrade', 'disappoints',
-        'low', 'negative', 'bearish', 'sell', 'loses'
-    ] if w in t)
-    return 'positive' if pos > neg else ('negative' if neg > pos else 'neutral')
-
-def fetch_news(ticker, n=3):
-    url = (
-        f"https://feeds.finance.yahoo.com/rss/2.0/headline"
-        f"?s={ticker}&region=US&lang=en-US"
-    )
-    try:
-        r = requests.get(url, timeout=8, headers={'User-Agent': 'Mozilla/5.0'})
-        root = ET.fromstring(r.content)
-        out = []
-        for item in root.findall('.//item')[:n]:
-            title = getattr(item.find('title'), 'text', '') or ''
-            link = getattr(item.find('link'), 'text', '#') or '#'
-            out.append({'title': title, 'link': link, 'sentiment': sentiment(title)})
-        return out
-    except Exception:
-        return []
-
 def overall_status(rsi, ma25, ma75, pct):
     sc = 0
     if rsi > 55:
@@ -93,12 +67,8 @@ def to_list(series, dec=2):
 
 # ── Fetch Data ─────────────────────────────────────────────────────────────────
 
-print("Reading watchlist.txt ...")
-with open('watchlist.txt') as f:
-    tickers = [l.strip() for l in f if l.strip() and not l.startswith('#')]
-
 stocks = []
-for sym in tickers:
+for sym in TICKERS:
     print(f"  {sym:8s}", end=' ', flush=True)
     try:
         tk = yf.Ticker(sym)
@@ -139,8 +109,6 @@ for sym in tickers:
         except Exception:
             name = sym
 
-        news = fetch_news(sym)
-
         N = 60
         c60 = close.tail(N)
         dates = c60.index.strftime('%m/%d').tolist()
@@ -173,7 +141,7 @@ for sym in tickers:
             'gc':       recent_gc,
             'dc':       recent_dc,
             'status':   status,
-            'news':     news,
+            'news':     [],
             'dates':    dates,
             'prices':   to_list(c60, 2),
             'ma25d':    to_list(ma25.tail(N), 2),
@@ -187,9 +155,11 @@ for sym in tickers:
     except Exception as e:
         print(f"ERROR: {e}")
 
-stocks.sort(key=lambda s: abs(s['pct']), reverse=True)
+# pct 降順でソート
+stocks.sort(key=lambda s: s['pct'], reverse=True)
 
-now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+JST = timezone(timedelta(hours=9))
+now_str = datetime.now(JST).strftime('%Y-%m-%d %H:%M JST')
 stocks_json = json.dumps(stocks, ensure_ascii=False)
 
 # ── HTML Template ──────────────────────────────────────────────────────────────
@@ -221,7 +191,6 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .hdr-btn{display:inline-flex;align-items:center;gap:3px;padding:7px 10px;border-radius:6px;font-size:11px;font-weight:600;background:#1c2128;color:#e6edf3;border:1px solid #30363d;touch-action:manipulation}
 .hdr-btn:active{background:#2d333b}
 
-
 /* ── Market Bar ───────────────────────────────────────────────── */
 .market-bar{display:flex;align-items:stretch;overflow-x:auto;background:#161b22;border-bottom:1px solid #21262d;scrollbar-width:none;-ms-overflow-style:none}
 .market-bar::-webkit-scrollbar{display:none}
@@ -233,7 +202,6 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .mkt-pct.down{color:#f85149}
 .mkt-pct.flat{color:#8b949e}
 .mkt-skeleton{color:#484f58;font-size:10px;letter-spacing:.5px}
-.mkt-retry{padding:6px 14px;font-size:10px;color:#8b949e;cursor:pointer;background:none;border:none;text-decoration:underline}
 
 /* ── Heatmap ──────────────────────────────────────────────────── */
 .heatmap-section{padding:10px 14px 6px}
@@ -257,7 +225,6 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr));gap:12px}
 .card{background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden;scroll-margin-top:50px;position:relative}
 .card:hover{border-color:#58a6ff44}
-.card.hidden-card{display:none}
 
 /* Remove button */
 .remove-btn{position:absolute;top:6px;right:8px;width:22px;height:22px;border-radius:50%;background:transparent;border:none;color:#484f58;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;z-index:10;transition:all .12s;padding:0}
@@ -311,17 +278,6 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 canvas{display:block}
 .gauge-wrap svg{width:100%;height:auto;max-width:108px}
 
-/* News */
-.news-section{padding:4px 12px 12px}
-.news-label{font-size:10px;color:#8b949e;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
-.news-item{display:flex;align-items:flex-start;gap:5px;margin-bottom:6px;line-height:1.45}
-.news-item a{font-size:11px;color:#58a6ff;flex:1;word-break:break-word;min-width:0;overflow-wrap:anywhere}
-.sent-badge{flex-shrink:0;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;text-transform:uppercase}
-.sent-positive{background:#1a3824;color:#3fb950}
-.sent-negative{background:#3d1a1a;color:#f85149}
-.sent-neutral{background:#1c2128;color:#8b949e}
-.no-news{font-size:11px;color:#6e7681;font-style:italic}
-
 /* ── Add Modal ────────────────────────────────────────────────── */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -348,6 +304,8 @@ canvas{display:block}
   body{font-size:12px}
   .header{padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
   h1{font-size:15px}
+  .mkt-item{min-width:62px;padding:5px 8px}
+  .mkt-price{font-size:11px}
   .heatmap-section{padding:8px 10px 5px}
   .hm-cell{min-width:52px;min-height:37px;font-size:10px;padding:3px 4px;border-radius:5px}
   .hm-cell .hm-pct{font-size:8px}
@@ -363,7 +321,6 @@ canvas{display:block}
   .macd-chart-wrap{height:54px}
   .divider{margin:0 10px}
   .summary-stats,.vol-row,.price-row{padding-left:10px;padding-right:10px}
-  .news-section{padding:4px 10px 10px}
   .macd-wrap{padding:2px 10px 7px}
   .sort-btn,.add-btn-inline{padding:8px 14px}
 }
@@ -401,8 +358,8 @@ canvas{display:block}
 <!-- Sort Bar + Cards -->
 <div class="sort-bar">
   <span class="sort-label">並び替え:</span>
-  <button class="sort-btn active" id="sort-abs" onclick="setSort('abs')">|Δ%| 絶対値</button>
-  <button class="sort-btn" id="sort-up"  onclick="setSort('up')">▲ 値上がり</button>
+  <button class="sort-btn" id="sort-abs" onclick="setSort('abs')">|Δ%| 絶対値</button>
+  <button class="sort-btn active" id="sort-up" onclick="setSort('up')">▲ 値上がり</button>
   <button class="sort-btn" id="sort-down" onclick="setSort('down')">▼ 値下がり</button>
   <button class="add-btn-inline" onclick="openAddModal()">＋ 銘柄追加</button>
 </div>
@@ -423,7 +380,7 @@ canvas{display:block}
       <button class="modal-cancel" onclick="closeAddModal()">キャンセル</button>
     </div>
     <div style="font-size:10px;color:#484f58">
-      ※ブラウザ上での追加は簡易表示です。<br>永続化するには watchlist.txt に追記して再生成してください。
+      ※ブラウザ上での追加は簡易表示です。<br>永続化するには generate.py の TICKERS に追記して再生成してください。
     </div>
   </div>
 </div>
@@ -439,9 +396,9 @@ const LS = {
   get: (k, def) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? def; } catch { return def; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
-let hiddenSet  = new Set(LS.get('wl_hidden', []));
+let hiddenSet   = new Set(LS.get('wl_hidden', []));
 let extraStocks = LS.get('wl_extra', []);
-let sortMode   = LS.get('wl_sort', 'abs');
+let sortMode    = LS.get('wl_sort', 'up');
 
 // ── Save Page ─────────────────────────────────────────────────────────────────
 function savePage() {
@@ -453,18 +410,16 @@ function savePage() {
   a.click(); URL.revokeObjectURL(a.href);
 }
 
-
 // ── Market Bar ────────────────────────────────────────────────────────────────
 const MKT_SYMBOLS = [
   { sym: 'USDJPY=X', label: '$/¥',   fmt: v => v.toFixed(2) },
-  { sym: '^IXIC',    label: 'NASDAQ', fmt: v => (v/1).toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { sym: 'NQ=F',     label: 'NQ先物', fmt: v => (v/1).toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { sym: '^DJI',     label: 'DOW',    fmt: v => (v/1).toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { sym: '^N225',    label: '日経',   fmt: v => (v/1).toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: '^IXIC',    label: 'NASDAQ', fmt: v => v.toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: 'NQ=F',     label: 'NQ先物', fmt: v => v.toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: '^DJI',     label: 'DOW',    fmt: v => v.toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: '^N225',    label: '日経',   fmt: v => v.toLocaleString('en-US',{maximumFractionDigits:0}) },
   { sym: '^VIX',     label: 'VIX',    fmt: v => v.toFixed(2) },
 ];
 
-// Build skeleton items immediately
 (function initMarketBar() {
   const bar = document.getElementById('market-bar');
   MKT_SYMBOLS.forEach(item => {
@@ -504,8 +459,7 @@ async function fetchOneSym(sym) {
 }
 
 function updateMktItem(item, result) {
-  const id  = `mkt-${item.sym.replace(/[^a-zA-Z0-9]/g,'_')}`;
-  const el  = document.getElementById(id);
+  const el = document.getElementById(`mkt-${item.sym.replace(/[^a-zA-Z0-9]/g,'_')}`);
   if (!el) return;
   if (!result) {
     el.querySelector('.mkt-price').textContent = '---';
@@ -525,16 +479,13 @@ function updateMktItem(item, result) {
 
 async function fetchMarketBar() {
   await Promise.allSettled(
-    MKT_SYMBOLS.map(async item => {
-      const result = await fetchOneSym(item.sym);
-      updateMktItem(item, result);
-    })
+    MKT_SYMBOLS.map(async item => updateMktItem(item, await fetchOneSym(item.sym)))
   );
 }
 fetchMarketBar();
 setInterval(fetchMarketBar, 60000);
 
-// ── Heatmap & pct color ───────────────────────────────────────────────────────
+// ── Heatmap ───────────────────────────────────────────────────────────────────
 function pctToColor(pct) {
   const t = Math.min(Math.abs(pct), 5) / 5;
   return pct >= 0
@@ -550,7 +501,6 @@ function renderHeatmap(stocks) {
     a.className = 'hm-cell';
     a.href = `#card-${s.ticker}`;
     a.dataset.ticker = s.ticker;
-    a.dataset.pct = s.pct;
     a.style.background = pctToColor(s.pct);
     a.style.color = Math.abs(s.pct) > 2 ? '#fff' : '#e6edf3';
     a.title = `${s.name}  ${s.pct >= 0 ? '+' : ''}${s.pct}%`;
@@ -606,18 +556,9 @@ function buildCard(s) {
   const volFire  = s.vratio >= 1.5 ? ' <span class="vol-fire">🔥</span>' : '';
   const volColor = s.vratio >= 1.5 ? '#f0883e' : '#8b949e';
   const volBold  = s.vratio >= 1.5 ? 700 : 400;
-  const sentLabel = sent => {
-    const m={positive:['sent-positive','POS'],negative:['sent-negative','NEG'],neutral:['sent-neutral','NEU']};
-    const [cls,lbl]=m[sent]||m.neutral;
-    return `<span class="sent-badge ${cls}">${lbl}</span>`;
-  };
-  const newsHTML = (s.news && s.news.length)
-    ? s.news.map(n=>`<div class="news-item">${sentLabel(n.sentiment)}<a href="${n.link}" target="_blank" rel="noopener noreferrer">${n.title}</a></div>`).join('')
-    : '<div class="no-news">No news available</div>';
   const macdDiff  = ((s.macd||0)-(s.signal||0)).toFixed(4);
   const macdColor = (s.macd||0) > (s.signal||0) ? '#3fb950' : '#f85149';
   const extraBadge = s._extra ? '<span class="extra-badge">＋追加</span>' : '';
-
   const hasCharts = s.prices && s.prices.length > 0;
 
   return `
@@ -659,12 +600,7 @@ function buildCard(s) {
     <div class="macd-wrap">
       <div class="macd-label">MACD (12/26/9) — Line &amp; Signal</div>
       <div class="macd-chart-wrap"><canvas id="mc-${s.ticker}"></canvas></div>
-    </div>
-    <div class="divider"></div>` : ''}
-    <div class="news-section">
-      <div class="news-label">Latest News</div>
-      ${newsHTML}
-    </div>`;
+    </div>` : ''}`;
 }
 
 // ── Render all cards ──────────────────────────────────────────────────────────
@@ -672,9 +608,9 @@ let ioRef = null;
 
 function getVisibleStocks() {
   const all = [...STOCKS, ...extraStocks].filter(s => !hiddenSet.has(s.ticker));
-  if (sortMode === 'up')   return [...all].sort((a,b) => b.pct - a.pct);
+  if (sortMode === 'abs')  return [...all].sort((a,b) => Math.abs(b.pct) - Math.abs(a.pct));
   if (sortMode === 'down') return [...all].sort((a,b) => a.pct - b.pct);
-  return [...all].sort((a,b) => Math.abs(b.pct) - Math.abs(a.pct));
+  return [...all].sort((a,b) => b.pct - a.pct);
 }
 
 function renderAll() {
@@ -683,10 +619,8 @@ function renderAll() {
   const visible = getVisibleStocks();
   document.getElementById('stock-count').textContent = visible.length + ' stocks';
 
-  // Heatmap
   renderHeatmap(visible);
 
-  // Cards
   const grid = document.getElementById('cards');
   grid.innerHTML = '';
   visible.forEach(s => {
@@ -699,7 +633,6 @@ function renderAll() {
     grid.appendChild(card);
   });
 
-  // Lazy chart rendering
   ioRef = new IntersectionObserver(entries => {
     entries.forEach(entry => {
       if (!entry.isIntersecting) return;
@@ -719,17 +652,17 @@ function renderPriceChart(s) {
   if (!cv || cv._rendered || !s.prices?.length) return;
   cv._rendered = true;
   const datasets = [
-    {label:'Price',data:s.prices,borderColor:'#58a6ff',borderWidth:1.5,pointRadius:0,tension:0.2,fill:false,order:3},
-    {label:'MA25',data:s.ma25d,borderColor:'#d4a017',borderWidth:1.2,pointRadius:0,tension:0.3,fill:false,order:2},
-    {label:'MA75',data:s.ma75d,borderColor:'#8b949e',borderWidth:1,borderDash:[4,2],pointRadius:0,tension:0.3,fill:false,order:1},
+    {label:'Price', data:s.prices, borderColor:'#58a6ff', borderWidth:1.5, pointRadius:0, tension:0.2, fill:false, order:3},
+    {label:'MA25',  data:s.ma25d,  borderColor:'#d4a017', borderWidth:1.2, pointRadius:0, tension:0.3, fill:false, order:2},
+    {label:'MA75',  data:s.ma75d,  borderColor:'#8b949e', borderWidth:1,   borderDash:[4,2], pointRadius:0, tension:0.3, fill:false, order:1},
   ];
-  if (s.gm?.length) datasets.push({label:'GC',type:'scatter',data:s.gm.map(p=>({x:p.x,y:p.y})),pointStyle:'triangle',pointRadius:8,borderColor:'#d4a017',backgroundColor:'#d4a017',order:0});
-  if (s.dm?.length) datasets.push({label:'DC',type:'scatter',data:s.dm.map(p=>({x:p.x,y:p.y})),pointStyle:'triangle',pointRotation:180,pointRadius:8,borderColor:'#8b949e',backgroundColor:'#8b949e',order:0});
+  if (s.gm?.length) datasets.push({label:'GC', type:'scatter', data:s.gm.map(p=>({x:p.x,y:p.y})), pointStyle:'triangle', pointRadius:8, borderColor:'#d4a017', backgroundColor:'#d4a017', order:0});
+  if (s.dm?.length) datasets.push({label:'DC', type:'scatter', data:s.dm.map(p=>({x:p.x,y:p.y})), pointStyle:'triangle', pointRotation:180, pointRadius:8, borderColor:'#8b949e', backgroundColor:'#8b949e', order:0});
   new Chart(cv, {
-    type:'line', data:{labels:s.dates,datasets},
-    options:{responsive:true,maintainAspectRatio:false,animation:false,
-      plugins:{legend:{display:false},tooltip:Object.assign(tipBase(),{mode:'index',intersect:false,callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y??''}`}})},
-      scales:{x:axisX(),y:axisY()}},
+    type:'line', data:{labels:s.dates, datasets},
+    options:{responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{legend:{display:false}, tooltip:Object.assign(tipBase(),{mode:'index',intersect:false,callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y??''}`}})},
+      scales:{x:axisX(), y:axisY()}},
   });
 }
 
@@ -739,13 +672,13 @@ function renderMacdChart(s) {
   cv._rendered = true;
   new Chart(cv, {
     type:'line',
-    data:{labels:s.dates,datasets:[
-      {label:'MACD',data:s.macd_d,borderColor:'#58a6ff',borderWidth:1.5,pointRadius:0,tension:0.2,fill:false,order:1},
-      {label:'Signal',data:s.sig_d,borderColor:'#f0883e',borderWidth:1.2,borderDash:[3,2],pointRadius:0,tension:0.2,fill:false,order:2},
+    data:{labels:s.dates, datasets:[
+      {label:'MACD',   data:s.macd_d, borderColor:'#58a6ff', borderWidth:1.5, pointRadius:0, tension:0.2, fill:false, order:1},
+      {label:'Signal', data:s.sig_d,  borderColor:'#f0883e', borderWidth:1.2, borderDash:[3,2], pointRadius:0, tension:0.2, fill:false, order:2},
     ]},
-    options:{responsive:true,maintainAspectRatio:false,animation:false,
-      plugins:{legend:{display:false},tooltip:Object.assign(tipBase(),{mode:'index',intersect:false})},
-      scales:{x:axisX({ticks:{display:false}}),y:axisY({ticks:{maxTicksLimit:3,font:{size:8}}})}},
+    options:{responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{legend:{display:false}, tooltip:Object.assign(tipBase(),{mode:'index',intersect:false})},
+      scales:{x:axisX({ticks:{display:false}}), y:axisY({ticks:{maxTicksLimit:3,font:{size:8}}})}},
   });
 }
 
@@ -778,7 +711,6 @@ function closeAddModal() {
   document.getElementById('add-modal').classList.remove('open');
 }
 
-// JS-side indicator calculations for browser-added stocks
 function jsEMA(arr, span) {
   const alpha = 2 / (span + 1);
   let v = arr[0]; const out = [v];
@@ -802,7 +734,6 @@ async function doAddTicker() {
 
   if (!sym) { errEl.textContent='ティッカーを入力してください'; errEl.classList.add('show'); return; }
 
-  // Already in list: just unhide
   if ([...STOCKS,...extraStocks].find(s=>s.ticker===sym)) {
     hiddenSet.delete(sym);
     LS.set('wl_hidden',[...hiddenSet]);
@@ -822,14 +753,13 @@ async function doAddTicker() {
     const rawVol    = result.indicators.quote[0].volume;
     const timestamps = result.timestamp;
 
-    // Filter nulls
     const valid = rawClose.map((c,i)=>({c,v:rawVol[i]||0,t:timestamps[i]})).filter(x=>x.c!=null);
     const closes = valid.map(x=>x.c);
     const vols   = valid.map(x=>x.v);
     const dates  = valid.map(x=>new Date(x.t*1000).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit'}));
 
     const N = 60;
-    const c60 = closes.slice(-N), v60 = vols.slice(-N), d60 = dates.slice(-N);
+    const c60 = closes.slice(-N), d60 = dates.slice(-N);
     const cur = closes.at(-1), prev = closes.at(-2)||cur;
     const pct = (cur-prev)/prev*100;
     const cvol = vols.at(-1)||0, avgvol = vols.slice(-11,-1).reduce((a,b)=>a+b,0)/10;
@@ -839,7 +769,6 @@ async function doAddTicker() {
     const macdLine = emaF.map((v,i)=>v-emaS[i]);
     const sigLine  = jsEMA(macdLine,9);
     const ma25arr  = jsMA(closes,25), ma75arr = jsMA(closes,75);
-
     const toN = (arr,dec=2) => arr.slice(-N).map(v=>v==null?null:+v.toFixed(dec));
 
     const s = {
@@ -855,8 +784,7 @@ async function doAddTicker() {
       ma25:   ma25arr.at(-1) ? +ma25arr.at(-1).toFixed(2) : null,
       ma75:   ma75arr.at(-1) ? +ma75arr.at(-1).toFixed(2) : null,
       ma_above: !!(ma25arr.at(-1) && ma75arr.at(-1) && ma25arr.at(-1) > ma75arr.at(-1)),
-      gc: false, dc: false,
-      status: 'neutral',
+      gc: false, dc: false, status: 'neutral',
       news: [], dates: d60,
       prices: toN(c60), ma25d: toN(ma25arr.slice(-N)), ma75d: toN(ma75arr.slice(-N)),
       macd_d: toN(macdLine.slice(-N),4), sig_d: toN(sigLine.slice(-N),4),
@@ -882,7 +810,6 @@ async function doAddTicker() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-// Restore sort button state
 document.getElementById(`sort-${sortMode}`)?.classList.add('active');
 ['abs','up','down'].filter(m=>m!==sortMode).forEach(m=>document.getElementById(`sort-${m}`)?.classList.remove('active'));
 

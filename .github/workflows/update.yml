@@ -1,0 +1,64 @@
+name: Update Dashboard
+
+on:
+  schedule:
+    - cron: '0 23 * * *'  # 毎日 JST 8:00 (UTC 23:00)
+  workflow_dispatch:       # 手動実行ボタン
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install yfinance requests
+
+      - name: Generate dashboard.html
+        run: python generate.py
+
+      - name: Commit & Push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add dashboard.html
+          git diff --cached --quiet || git commit -m "Update dashboard $(TZ=Asia/Tokyo date '+%Y-%m-%d %H:%M') JST"
+          git push
+
+      - name: Prepare site
+        run: |
+          mkdir _site
+          cp dashboard.html _site/index.html
+          cp dashboard.html _site/dashboard.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
