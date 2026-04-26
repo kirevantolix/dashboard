@@ -222,6 +222,19 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .hdr-btn:active{background:#2d333b}
 
 
+/* ── Market Bar ───────────────────────────────────────────────── */
+.market-bar{display:flex;align-items:stretch;overflow-x:auto;background:#161b22;border-bottom:1px solid #21262d;scrollbar-width:none;-ms-overflow-style:none}
+.market-bar::-webkit-scrollbar{display:none}
+.mkt-item{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:7px 12px;border-right:1px solid #21262d;flex-shrink:0;min-width:70px;gap:2px}
+.mkt-label{font-size:9px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.mkt-price{font-size:12px;font-weight:700;color:#e6edf3}
+.mkt-pct{font-size:10px;font-weight:700}
+.mkt-pct.up{color:#3fb950}
+.mkt-pct.down{color:#f85149}
+.mkt-pct.flat{color:#8b949e}
+.mkt-skeleton{color:#484f58;font-size:10px;letter-spacing:.5px}
+.mkt-retry{padding:6px 14px;font-size:10px;color:#8b949e;cursor:pointer;background:none;border:none;text-decoration:underline}
+
 /* ── Heatmap ──────────────────────────────────────────────────── */
 .heatmap-section{padding:10px 14px 6px}
 .heatmap-section h2{font-size:10px;color:#8b949e;margin-bottom:7px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
@@ -336,6 +349,8 @@ canvas{display:block}
   h1{font-size:15px}
   .mkt-item{min-width:64px;padding:5px 8px}
   .mkt-price{font-size:11px}
+  .mkt-item{min-width:62px;padding:5px 8px}
+  .mkt-price{font-size:11px}
   .heatmap-section{padding:8px 10px 5px}
   .hm-cell{min-width:52px;min-height:37px;font-size:10px;padding:3px 4px;border-radius:5px}
   .hm-cell .hm-pct{font-size:8px}
@@ -375,6 +390,9 @@ canvas{display:block}
     <button class="hdr-btn" onclick="savePage()">💾 保存</button>
   </div>
 </div>
+
+<!-- Market Bar -->
+<div class="market-bar" id="market-bar"></div>
 
 <!-- Heatmap -->
 <div class="heatmap-section">
@@ -437,6 +455,86 @@ function savePage() {
   a.click(); URL.revokeObjectURL(a.href);
 }
 
+
+// ── Market Bar ────────────────────────────────────────────────────────────────
+const MKT_SYMBOLS = [
+  { sym: 'USDJPY=X', label: '$/¥',   fmt: v => v.toFixed(2) },
+  { sym: '^IXIC',    label: 'NASDAQ', fmt: v => (v/1).toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: 'NQ=F',     label: 'NQ先物', fmt: v => (v/1).toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: '^DJI',     label: 'DOW',    fmt: v => (v/1).toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: '^N225',    label: '日経',   fmt: v => (v/1).toLocaleString('en-US',{maximumFractionDigits:0}) },
+  { sym: '^VIX',     label: 'VIX',    fmt: v => v.toFixed(2) },
+];
+
+// Build skeleton items immediately
+(function initMarketBar() {
+  const bar = document.getElementById('market-bar');
+  MKT_SYMBOLS.forEach(item => {
+    const el = document.createElement('div');
+    el.className = 'mkt-item';
+    el.id = `mkt-${item.sym.replace(/[^a-zA-Z0-9]/g,'_')}`;
+    el.innerHTML = `<span class="mkt-label">${item.label}</span>
+      <span class="mkt-price mkt-skeleton">···</span>
+      <span class="mkt-pct mkt-skeleton">···</span>`;
+    bar.appendChild(el);
+  });
+})();
+
+async function fetchOneSym(sym) {
+  const enc = encodeURIComponent(sym);
+  const hosts = ['query1.finance.yahoo.com', 'query2.finance.yahoo.com'];
+  for (const host of hosts) {
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 8000);
+    try {
+      const res = await fetch(
+        `https://${host}/v8/finance/chart/${enc}?interval=1d&range=2d&includePrePost=false`,
+        { signal: ctrl.signal, headers: { Accept: 'application/json' } }
+      );
+      clearTimeout(tid);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const meta = data.chart?.result?.[0]?.meta;
+      if (!meta) continue;
+      const price = meta.regularMarketPrice;
+      const prev  = meta.chartPreviousClose ?? meta.previousClose ?? price;
+      const pct   = prev ? (price - prev) / prev * 100 : 0;
+      return { price, pct };
+    } catch { clearTimeout(tid); }
+  }
+  return null;
+}
+
+function updateMktItem(item, result) {
+  const id  = `mkt-${item.sym.replace(/[^a-zA-Z0-9]/g,'_')}`;
+  const el  = document.getElementById(id);
+  if (!el) return;
+  if (!result) {
+    el.querySelector('.mkt-price').textContent = '---';
+    el.querySelector('.mkt-pct').textContent   = '---';
+    return;
+  }
+  const { price, pct } = result;
+  const sign = pct >= 0 ? '+' : '';
+  const cls  = Math.abs(pct) < 0.01 ? 'flat' : pct > 0 ? 'up' : 'down';
+  const priceEl = el.querySelector('.mkt-price');
+  const pctEl   = el.querySelector('.mkt-pct');
+  priceEl.textContent = item.fmt(price);
+  priceEl.classList.remove('mkt-skeleton');
+  pctEl.textContent = `${sign}${pct.toFixed(2)}%`;
+  pctEl.className = `mkt-pct ${cls}`;
+}
+
+async function fetchMarketBar() {
+  await Promise.allSettled(
+    MKT_SYMBOLS.map(async item => {
+      const result = await fetchOneSym(item.sym);
+      updateMktItem(item, result);
+    })
+  );
+}
+fetchMarketBar();
+setInterval(fetchMarketBar, 60000);
 
 // ── Heatmap & pct color ───────────────────────────────────────────────────────
 function pctToColor(pct) {
