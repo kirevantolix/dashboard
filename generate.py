@@ -394,12 +394,17 @@ function renderHeatmap(stocks) {
   stocks.forEach(s => {
     const a = document.createElement('a');
     a.className = 'hm-cell';
-    a.href = `#card-${s.ticker}`;
+    a.href = '#';
     a.dataset.ticker = s.ticker;
     a.style.background = pctToColor(s.pct);
     a.style.color = Math.abs(s.pct) > 2 ? '#fff' : '#e6edf3';
     a.title = `${s.name}  ${s.pct >= 0 ? '+' : ''}${s.pct}%`;
     a.innerHTML = `<span>${s.ticker}</span><span class="hm-pct">${s.pct >= 0 ? '+' : ''}${s.pct}%</span>`;
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const card = document.getElementById(`card-${s.ticker}`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
     hm.appendChild(a);
   });
 }
