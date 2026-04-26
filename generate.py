@@ -595,6 +595,10 @@ function hideStock(ticker) {
 
 
 // ── Init ──────────────────────────────────────────────────────────────────────
+// ページロード時にハッシュを消してトップに戻る
+history.replaceState(null, '', window.location.pathname);
+window.scrollTo(0, 0);
+
 document.getElementById(`sort-${sortMode}`)?.classList.add('active');
 ['sector','up','down'].filter(m=>m!==sortMode).forEach(m=>document.getElementById(`sort-${m}`)?.classList.remove('active'));
 
