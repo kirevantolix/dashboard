@@ -349,6 +349,7 @@ canvas{display:block}
   <button class="sort-btn active" id="sort-sector" onclick="setSort('sector')">☰ セクター順</button>
   <button class="sort-btn" id="sort-up"     onclick="setSort('up')">▲ 値上がり</button>
   <button class="sort-btn" id="sort-down"   onclick="setSort('down')">▼ 値下がり</button>
+  <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">RSI↓</button>
 </div>
 <div class="cards-section">
   <div class="cards-grid" id="cards"></div>
@@ -368,7 +369,7 @@ const LS = {
 };
 let hiddenSet = new Set(LS.get('wl_hidden', []));
 let sortMode  = LS.get('wl_sort', 'sector');
-if (!['sector','up','down'].includes(sortMode)) sortMode = 'sector';
+if (!['sector','up','down','rsi'].includes(sortMode)) sortMode = 'sector';
 
 // ── Save Page ─────────────────────────────────────────────────────────────────
 function savePage() {
@@ -509,6 +510,7 @@ function getVisibleStocks() {
   const all = [...STOCKS].filter(s => !hiddenSet.has(s.ticker));
   if (sortMode === 'up')   return [...all].sort((a,b) => b.pct - a.pct);
   if (sortMode === 'down') return [...all].sort((a,b) => a.pct - b.pct);
+  if (sortMode === 'rsi')  return [...all].sort((a,b) => (b.rsi||0) - (a.rsi||0));
   return all; // sector order = STOCKS array order
 }
 
@@ -585,7 +587,7 @@ function renderMacdChart(s) {
 function setSort(mode) {
   sortMode = mode;
   LS.set('wl_sort', mode);
-  ['sector','up','down'].forEach(m => {
+  ['sector','up','down','rsi'].forEach(m => {
     document.getElementById(`sort-${m}`).classList.toggle('active', m === mode);
   });
   renderAll();
