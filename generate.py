@@ -221,16 +221,6 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .hdr-btn{display:inline-flex;align-items:center;gap:3px;padding:5px 9px;border-radius:6px;font-size:11px;font-weight:600;background:#1c2128;color:#e6edf3;border:1px solid #30363d}
 .hdr-btn:active{background:#2d333b}
 
-/* ── Market Bar ───────────────────────────────────────────────── */
-.market-bar{display:flex;align-items:center;gap:0;overflow-x:auto;background:#0d1117;border-bottom:1px solid #21262d;padding:0 4px;scrollbar-width:none;-ms-overflow-style:none}
-.market-bar::-webkit-scrollbar{display:none}
-.mkt-item{display:flex;flex-direction:column;align-items:center;padding:6px 10px;border-right:1px solid #21262d;flex-shrink:0;min-width:72px}
-.mkt-label{font-size:9px;color:#8b949e;text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px}
-.mkt-price{font-size:12px;font-weight:700;color:#e6edf3}
-.mkt-pct{font-size:10px;font-weight:600}
-.mkt-pct.up{color:#3fb950}
-.mkt-pct.down{color:#f85149}
-.mkt-loading{font-size:10px;color:#484f58;padding:8px 14px}
 
 /* ── Heatmap ──────────────────────────────────────────────────── */
 .heatmap-section{padding:10px 14px 6px}
@@ -386,11 +376,6 @@ canvas{display:block}
   </div>
 </div>
 
-<!-- Market Bar -->
-<div class="market-bar" id="market-bar">
-  <div class="mkt-loading">マーケット情報を取得中...</div>
-</div>
-
 <!-- Heatmap -->
 <div class="heatmap-section">
   <h2>Heatmap — Daily Change</h2>
@@ -452,47 +437,6 @@ function savePage() {
   a.click(); URL.revokeObjectURL(a.href);
 }
 
-// ── Market Bar ────────────────────────────────────────────────────────────────
-const MARKET_ITEMS = [
-  { sym: 'USDJPY=X', label: '$/¥',   fmt: v => v.toFixed(2) },
-  { sym: '^IXIC',    label: 'NASDAQ', fmt: v => v.toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { sym: 'NQ=F',     label: 'NQ先物', fmt: v => v.toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { sym: '^DJI',     label: 'DOW',    fmt: v => v.toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { sym: '^N225',    label: '日経',   fmt: v => v.toLocaleString('en-US',{maximumFractionDigits:0}) },
-  { sym: '^VIX',     label: 'VIX',    fmt: v => v.toFixed(2) },
-];
-
-async function fetchMarketBar() {
-  const bar = document.getElementById('market-bar');
-  try {
-    const syms = MARKET_ITEMS.map(m => encodeURIComponent(m.sym)).join(',');
-    const res  = await fetch(
-      `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${syms}`,
-      { headers: { Accept: 'application/json' } }
-    );
-    const data = await res.json();
-    const results = data.quoteResponse?.result ?? [];
-    bar.innerHTML = '';
-    MARKET_ITEMS.forEach(item => {
-      const q = results.find(r => r.symbol === item.sym);
-      if (!q) return;
-      const price = q.regularMarketPrice;
-      const pct   = q.regularMarketChangePercent ?? 0;
-      const sign  = pct >= 0 ? '+' : '';
-      const cls   = pct >= 0 ? 'up' : 'down';
-      const el = document.createElement('div');
-      el.className = 'mkt-item';
-      el.innerHTML = `<span class="mkt-label">${item.label}</span>
-        <span class="mkt-price">${item.fmt(price)}</span>
-        <span class="mkt-pct ${cls}">${sign}${pct.toFixed(2)}%</span>`;
-      bar.appendChild(el);
-    });
-  } catch {
-    bar.innerHTML = '<div class="mkt-loading">マーケット情報を取得できませんでした</div>';
-  }
-}
-fetchMarketBar();
-setInterval(fetchMarketBar, 60000);
 
 // ── Heatmap & pct color ───────────────────────────────────────────────────────
 function pctToColor(pct) {
