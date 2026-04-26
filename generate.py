@@ -215,8 +215,6 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .sort-btn{padding:7px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #30363d;background:#1c2128;color:#8b949e;transition:all .12s;touch-action:manipulation}
 .sort-btn.active{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff}
 .sort-btn:active{opacity:.7}
-.add-btn-inline{margin-left:auto;display:inline-flex;align-items:center;gap:4px;padding:7px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #3fb95066;background:#1a382466;color:#3fb950;touch-action:manipulation}
-.add-btn-inline:active{opacity:.7}
 
 /* ── Cards ────────────────────────────────────────────────────── */
 .cards-section{padding:6px 14px;padding-bottom:max(40px,calc(env(safe-area-inset-bottom) + 24px))}
@@ -246,7 +244,7 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .badge-bearish{background:#3d1a1a;color:#f85149}
 .badge-neutral{background:#2a2000;color:#d29922}
 .ma-badge{font-size:10px;padding:2px 6px;border-radius:4px;background:#1c2128;color:#8b949e;border:1px solid #30363d}
-.extra-badge{font-size:9px;padding:1px 5px;border-radius:3px;background:#2a2000;color:#d29922;border:1px solid #9e6a03}
+
 
 /* Price / Volume */
 .price-row{display:flex;align-items:baseline;gap:10px;padding:0 12px 4px}
@@ -276,23 +274,6 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 canvas{display:block}
 .gauge-wrap svg{width:100%;height:auto;max-width:108px}
 
-/* ── Add Modal ────────────────────────────────────────────────── */
-.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:500;align-items:center;justify-content:center}
-.modal-overlay.open{display:flex}
-.modal-box{background:#161b22;border:1px solid #30363d;border-radius:12px;padding:20px;width:min(320px,90vw);display:flex;flex-direction:column;gap:12px}
-.modal-title{font-size:14px;font-weight:700;color:#e6edf3}
-.modal-input{background:#0d1117;border:1px solid #30363d;border-radius:6px;padding:9px 12px;color:#e6edf3;font-size:16px;font-family:inherit;width:100%;outline:none}
-.modal-input:focus{border-color:#58a6ff}
-.modal-input::placeholder{color:#484f58}
-.modal-btns{display:flex;gap:8px}
-.modal-ok{flex:1;padding:8px;border-radius:6px;border:none;background:#1f6feb;color:#fff;font-size:13px;font-weight:600}
-.modal-ok:active{opacity:.8}
-.modal-cancel{padding:8px 14px;border-radius:6px;border:1px solid #30363d;background:transparent;color:#8b949e;font-size:13px}
-.modal-cancel:active{opacity:.7}
-.modal-err{font-size:11px;color:#f85149;display:none}
-.modal-err.show{display:block}
-.spinner{display:none;text-align:center;color:#8b949e;font-size:12px}
-.spinner.show{display:block}
 
 /* ── Tablet / Mobile ──────────────────────────────────────────── */
 @media(min-width:601px) and (max-width:900px){
@@ -318,7 +299,7 @@ canvas{display:block}
   .divider{margin:0 10px}
   .summary-stats,.vol-row,.price-row{padding-left:10px;padding-right:10px}
   .macd-wrap{padding:2px 10px 7px}
-  .sort-btn,.add-btn-inline{padding:8px 14px}
+  .sort-btn{padding:8px 14px}
 }
 @media(max-width:375px){
   .hm-cell{min-width:46px;font-size:9px}
@@ -354,29 +335,11 @@ canvas{display:block}
   <button class="sort-btn" id="sort-abs" onclick="setSort('abs')">|Δ%| 絶対値</button>
   <button class="sort-btn active" id="sort-up" onclick="setSort('up')">▲ 値上がり</button>
   <button class="sort-btn" id="sort-down" onclick="setSort('down')">▼ 値下がり</button>
-  <button class="add-btn-inline" onclick="openAddModal()">＋ 銘柄追加</button>
 </div>
 <div class="cards-section">
   <div class="cards-grid" id="cards"></div>
 </div>
 
-<!-- Add Ticker Modal -->
-<div class="modal-overlay" id="add-modal" onclick="if(event.target===this)closeAddModal()">
-  <div class="modal-box">
-    <div class="modal-title">📌 銘柄を追加</div>
-    <input class="modal-input" id="add-input" placeholder="ティッカー例: GOOG, TSLA" maxlength="10"
-      onkeydown="if(event.key==='Enter')doAddTicker()">
-    <div class="spinner" id="add-spinner">⏳ データ取得中...</div>
-    <div class="modal-err" id="add-err"></div>
-    <div class="modal-btns">
-      <button class="modal-ok" onclick="doAddTicker()">追加</button>
-      <button class="modal-cancel" onclick="closeAddModal()">キャンセル</button>
-    </div>
-    <div style="font-size:10px;color:#484f58">
-      ※ブラウザ上での追加は簡易表示です。<br>永続化するには generate.py の TICKERS に追記して再生成してください。
-    </div>
-  </div>
-</div>
 
 <script>
 const STOCKS = STOCKS_JSON_PLACEHOLDER;
@@ -389,9 +352,8 @@ const LS = {
   get: (k, def) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? def; } catch { return def; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
-let hiddenSet   = new Set(LS.get('wl_hidden', []));
-let extraStocks = LS.get('wl_extra', []);
-let sortMode    = LS.get('wl_sort', 'up');
+let hiddenSet = new Set(LS.get('wl_hidden', []));
+let sortMode  = LS.get('wl_sort', 'up');
 
 // ── Save Page ─────────────────────────────────────────────────────────────────
 function savePage() {
@@ -476,7 +438,6 @@ function buildCard(s) {
   const volBold  = s.vratio >= 1.5 ? 700 : 400;
   const macdDiff  = ((s.macd||0)-(s.signal||0)).toFixed(4);
   const macdColor = (s.macd||0) > (s.signal||0) ? '#3fb950' : '#f85149';
-  const extraBadge = s._extra ? '<span class="extra-badge">＋追加</span>' : '';
   const hasCharts = s.prices && s.prices.length > 0;
 
   return `
@@ -485,7 +446,7 @@ function buildCard(s) {
     <div class="card-header">
       <div class="ticker-row">
         <span class="ticker">${s.ticker}</span>
-        ${statusBadge}${crossBadges}${maBadge}${extraBadge}
+        ${statusBadge}${crossBadges}${maBadge}
       </div>
       <div class="company-name">${s.name}</div>
     </div>
@@ -525,7 +486,7 @@ function buildCard(s) {
 let ioRef = null;
 
 function getVisibleStocks() {
-  const all = [...STOCKS, ...extraStocks].filter(s => !hiddenSet.has(s.ticker));
+  const all = [...STOCKS].filter(s => !hiddenSet.has(s.ticker));
   if (sortMode === 'abs')  return [...all].sort((a,b) => Math.abs(b.pct) - Math.abs(a.pct));
   if (sortMode === 'down') return [...all].sort((a,b) => a.pct - b.pct);
   return [...all].sort((a,b) => b.pct - a.pct);
@@ -555,7 +516,7 @@ function renderAll() {
     entries.forEach(entry => {
       if (!entry.isIntersecting) return;
       const ticker = entry.target.dataset.ticker;
-      const s = [...STOCKS, ...extraStocks].find(x => x.ticker === ticker);
+      const s = STOCKS.find(x => x.ticker === ticker);
       if (s) { renderPriceChart(s); renderMacdChart(s); }
       ioRef.unobserve(entry.target);
     });
@@ -617,115 +578,6 @@ function hideStock(ticker) {
   renderAll();
 }
 
-// ── Add Ticker Modal ──────────────────────────────────────────────────────────
-function openAddModal() {
-  document.getElementById('add-modal').classList.add('open');
-  document.getElementById('add-input').value = '';
-  document.getElementById('add-err').classList.remove('show');
-  document.getElementById('add-spinner').classList.remove('show');
-  setTimeout(() => document.getElementById('add-input').focus(), 100);
-}
-function closeAddModal() {
-  document.getElementById('add-modal').classList.remove('open');
-}
-
-function jsEMA(arr, span) {
-  const alpha = 2 / (span + 1);
-  let v = arr[0]; const out = [v];
-  for (let i = 1; i < arr.length; i++) { v = arr[i]*alpha + v*(1-alpha); out.push(v); }
-  return out;
-}
-function jsRSI(closes, n=14) {
-  const gains=[], losses=[];
-  for (let i=1; i<closes.length; i++) { const d=closes[i]-closes[i-1]; gains.push(Math.max(d,0)); losses.push(Math.max(-d,0)); }
-  const alpha=1/n; let ag=gains.slice(0,n).reduce((a,b)=>a+b)/n, al=losses.slice(0,n).reduce((a,b)=>a+b)/n;
-  for (let i=n; i<gains.length; i++) { ag=ag*(1-alpha)+gains[i]*alpha; al=al*(1-alpha)+losses[i]*alpha; }
-  return al===0 ? 100 : 100-100/(1+ag/al);
-}
-function jsMA(closes, n) { return closes.map((_,i) => i<n-1?null:closes.slice(i-n+1,i+1).reduce((a,b)=>a+b)/n); }
-
-async function doAddTicker() {
-  const sym = document.getElementById('add-input').value.trim().toUpperCase();
-  const errEl = document.getElementById('add-err');
-  const spinEl = document.getElementById('add-spinner');
-  errEl.classList.remove('show');
-
-  if (!sym) { errEl.textContent='ティッカーを入力してください'; errEl.classList.add('show'); return; }
-
-  if ([...STOCKS,...extraStocks].find(s=>s.ticker===sym)) {
-    hiddenSet.delete(sym);
-    LS.set('wl_hidden',[...hiddenSet]);
-    closeAddModal(); renderAll(); return;
-  }
-
-  spinEl.classList.add('show');
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=6mo`;
-    const res = await fetch(url, {headers:{Accept:'application/json'}});
-    const data = await res.json();
-    const result = data.chart?.result?.[0];
-    if (!result) throw new Error('銘柄が見つかりません');
-
-    const meta = result.meta;
-    const rawClose  = result.indicators.quote[0].close;
-    const rawVol    = result.indicators.quote[0].volume;
-    const timestamps = result.timestamp;
-
-    const valid = rawClose.map((c,i)=>({c,v:rawVol[i]||0,t:timestamps[i]})).filter(x=>x.c!=null);
-    const closes = valid.map(x=>x.c);
-    const vols   = valid.map(x=>x.v);
-    const dates  = valid.map(x=>new Date(x.t*1000).toLocaleDateString('en-US',{month:'2-digit',day:'2-digit'}));
-
-    const N = 60;
-    const c60 = closes.slice(-N), d60 = dates.slice(-N);
-    const cur = closes.at(-1), prev = closes.at(-2)||cur;
-    const pct = (cur-prev)/prev*100;
-    const cvol = vols.at(-1)||0, avgvol = vols.slice(-11,-1).reduce((a,b)=>a+b,0)/10;
-
-    const rsi = jsRSI(closes);
-    const emaF = jsEMA(closes,12), emaS = jsEMA(closes,26);
-    const macdLine = emaF.map((v,i)=>v-emaS[i]);
-    const sigLine  = jsEMA(macdLine,9);
-    const ma25arr  = jsMA(closes,25), ma75arr = jsMA(closes,75);
-    const toN = (arr,dec=2) => arr.slice(-N).map(v=>v==null?null:+v.toFixed(dec));
-
-    const s = {
-      ticker: sym,
-      name:   meta.longName || meta.shortName || sym,
-      price:  +cur.toFixed(2),
-      pct:    +pct.toFixed(2),
-      volume: cvol, avgvol: +avgvol.toFixed(0),
-      vratio: avgvol ? +(cvol/avgvol).toFixed(2) : 1,
-      rsi:    +rsi.toFixed(1),
-      macd:   +macdLine.at(-1).toFixed(4),
-      signal: +sigLine.at(-1).toFixed(4),
-      ma25:   ma25arr.at(-1) ? +ma25arr.at(-1).toFixed(2) : null,
-      ma75:   ma75arr.at(-1) ? +ma75arr.at(-1).toFixed(2) : null,
-      ma_above: !!(ma25arr.at(-1) && ma75arr.at(-1) && ma25arr.at(-1) > ma75arr.at(-1)),
-      gc: false, dc: false, status: 'neutral',
-      news: [], dates: d60,
-      prices: toN(c60), ma25d: toN(ma25arr.slice(-N)), ma75d: toN(ma75arr.slice(-N)),
-      macd_d: toN(macdLine.slice(-N),4), sig_d: toN(sigLine.slice(-N),4),
-      gm: [], dm: [], _extra: true,
-    };
-    s.status = (() => {
-      let sc=0;
-      if(s.rsi>55)sc++;else if(s.rsi<45)sc--;
-      if(s.ma25&&s.ma75){sc+=s.ma_above?1:-1;}
-      sc+=s.pct>0.5?1:s.pct<-0.5?-1:0;
-      return sc>=2?'bullish':sc<=-2?'bearish':'neutral';
-    })();
-
-    extraStocks.push(s);
-    LS.set('wl_extra', extraStocks);
-    closeAddModal(); renderAll();
-  } catch(e) {
-    errEl.textContent = e.message || '取得に失敗しました';
-    errEl.classList.add('show');
-  } finally {
-    spinEl.classList.remove('show');
-  }
-}
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.getElementById(`sort-${sortMode}`)?.classList.add('active');

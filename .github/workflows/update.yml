@@ -2,7 +2,10 @@ name: Update Dashboard
 
 on:
   schedule:
-    - cron: '0 23 * * *'  # 毎日 JST 8:00 (UTC 23:00)
+    - cron: '0 21 * * *'   # 日本時間 朝6時 (UTC 21:00)
+    - cron: '40 13 * * *'  # 日本時間 夜22時40分 (UTC 13:40)
+    - cron: '40 14 * * *'  # 日本時間 夜23時40分 (UTC 14:40)
+    - cron: '0 17 * * *'   # 日本時間 朝2時 (UTC 17:00)
   workflow_dispatch:       # 手動実行ボタン
 
 permissions:
