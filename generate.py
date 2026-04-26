@@ -165,8 +165,22 @@ for sym in TICKERS:
     except Exception as e:
         print(f"ERROR: {e}")
 
-# pct 降順でソート
-stocks.sort(key=lambda s: s['pct'], reverse=True)
+# セクター順でソート（デフォルト表示順）
+SECTOR_ORDER = [
+    # テック大型
+    'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AVGO', 'TSLA', 'ORCL',
+    'AMD', 'INTC', 'NFLX', 'PLTR', 'QCOM', 'APP',
+    # 半導体・ハード
+    'MU', 'SNDK', 'NBIS', 'ARM', 'TSM', 'LITE', 'CRDO', 'LPTH',
+    # 金融・その他
+    'GS', 'KO', 'NU', 'OSCR',
+    # ETF
+    'SPY', 'QQQ', 'IWM', 'VT', 'SOXL',
+    # コモディティ
+    'SLV', 'COPX', 'GLD',
+]
+_sector_idx = {t: i for i, t in enumerate(SECTOR_ORDER)}
+stocks.sort(key=lambda s: _sector_idx.get(s['ticker'], len(SECTOR_ORDER)))
 
 JST = timezone(timedelta(hours=9))
 now_str = datetime.now(JST).strftime('%Y-%m-%d %H:%M JST')
@@ -332,9 +346,9 @@ canvas{display:block}
 <!-- Sort Bar + Cards -->
 <div class="sort-bar">
   <span class="sort-label">並び替え:</span>
-  <button class="sort-btn" id="sort-abs" onclick="setSort('abs')">|Δ%| 絶対値</button>
-  <button class="sort-btn active" id="sort-up" onclick="setSort('up')">▲ 値上がり</button>
-  <button class="sort-btn" id="sort-down" onclick="setSort('down')">▼ 値下がり</button>
+  <button class="sort-btn active" id="sort-sector" onclick="setSort('sector')">☰ セクター順</button>
+  <button class="sort-btn" id="sort-up"     onclick="setSort('up')">▲ 値上がり</button>
+  <button class="sort-btn" id="sort-down"   onclick="setSort('down')">▼ 値下がり</button>
 </div>
 <div class="cards-section">
   <div class="cards-grid" id="cards"></div>
@@ -353,7 +367,8 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 let hiddenSet = new Set(LS.get('wl_hidden', []));
-let sortMode  = LS.get('wl_sort', 'up');
+let sortMode  = LS.get('wl_sort', 'sector');
+if (!['sector','up','down'].includes(sortMode)) sortMode = 'sector';
 
 // ── Save Page ─────────────────────────────────────────────────────────────────
 function savePage() {
@@ -487,9 +502,9 @@ let ioRef = null;
 
 function getVisibleStocks() {
   const all = [...STOCKS].filter(s => !hiddenSet.has(s.ticker));
-  if (sortMode === 'abs')  return [...all].sort((a,b) => Math.abs(b.pct) - Math.abs(a.pct));
+  if (sortMode === 'up')   return [...all].sort((a,b) => b.pct - a.pct);
   if (sortMode === 'down') return [...all].sort((a,b) => a.pct - b.pct);
-  return [...all].sort((a,b) => b.pct - a.pct);
+  return all; // sector order = STOCKS array order
 }
 
 function renderAll() {
@@ -565,7 +580,7 @@ function renderMacdChart(s) {
 function setSort(mode) {
   sortMode = mode;
   LS.set('wl_sort', mode);
-  ['abs','up','down'].forEach(m => {
+  ['sector','up','down'].forEach(m => {
     document.getElementById(`sort-${m}`).classList.toggle('active', m === mode);
   });
   renderAll();
@@ -581,7 +596,7 @@ function hideStock(ticker) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 document.getElementById(`sort-${sortMode}`)?.classList.add('active');
-['abs','up','down'].filter(m=>m!==sortMode).forEach(m=>document.getElementById(`sort-${m}`)?.classList.remove('active'));
+['sector','up','down'].filter(m=>m!==sortMode).forEach(m=>document.getElementById(`sort-${m}`)?.classList.remove('active'));
 
 renderAll();
 </script>
