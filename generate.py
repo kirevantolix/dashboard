@@ -5,6 +5,7 @@ Reads tickers.txt (1 ticker per line). Falls back to built-in list if not found.
 """
 
 import os
+import random
 import yfinance as yf
 import pandas as pd
 import json
@@ -182,6 +183,25 @@ SECTOR_ORDER = [
 _sector_idx = {t: i for i, t in enumerate(SECTOR_ORDER)}
 stocks.sort(key=lambda s: _sector_idx.get(s['ticker'], len(SECTOR_ORDER)))
 
+QUOTES = [
+    '休むも相場',
+    '頭と尻尾はくれてやれ',
+    '落ちるナイフは掴むな',
+    '損小利大を心がけよ',
+    '総悲観は買い',
+    '買うは易し、売るは難し',
+    '市場は常に正しい',
+    'トレンドはあなたの友だ',
+    '上げ百日、下げ三日',
+    'もうはまだなり、まだはもうなり',
+    '価格はすべてを織り込む',
+    '良い投資家は退屈を楽しむ',
+    '靴磨きの少年が株の話を始めたら天井',
+    '相場に予測は禁物、対応あるのみ',
+    '最大の敵は市場ではなく自分自身だ',
+]
+daily_quote = random.choice(QUOTES)
+
 JST = timezone(timedelta(hours=9))
 now_str = datetime.now(JST).strftime('%Y-%m-%d %H:%M JST')
 stocks_json = json.dumps(stocks, ensure_ascii=False)
@@ -212,6 +232,11 @@ button{cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparen
 h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .gen-time{font-size:10px;color:#8b949e}
 .header-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+
+/* ── Quote ────────────────────────────────────────────────────── */
+.quote-section{padding:8px 14px 4px;display:flex;align-items:center;gap:6px}
+.quote-mark{font-size:16px;color:#30363d;line-height:1;flex-shrink:0}
+.quote-text{font-size:11px;color:#8b949e;font-style:italic;letter-spacing:.3px}
 
 /* ── Heatmap ──────────────────────────────────────────────────── */
 .heatmap-section{padding:10px 14px 6px}
@@ -328,6 +353,13 @@ canvas{display:block}
   <div class="header-right">
     <span id="stock-count" style="font-size:10px;color:#8b949e"></span>
   </div>
+</div>
+
+<!-- Quote of the day -->
+<div class="quote-section">
+  <span class="quote-mark">"</span>
+  <span class="quote-text">QUOTE_PLACEHOLDER</span>
+  <span class="quote-mark">"</span>
 </div>
 
 <!-- Heatmap -->
@@ -590,6 +622,7 @@ renderAll();
 
 HTML = HTML.replace('STOCKS_JSON_PLACEHOLDER', stocks_json)
 HTML = HTML.replace('GENERATED_AT_PLACEHOLDER', now_str)
+HTML = HTML.replace('QUOTE_PLACEHOLDER', daily_quote)
 
 with open('dashboard.html', 'w', encoding='utf-8') as f:
     f.write(HTML)
