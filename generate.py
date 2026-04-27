@@ -123,17 +123,6 @@ for sym in TICKERS:
         N = 60
         c60 = close.tail(N)
         dates = c60.index.strftime('%m/%d').tolist()
-        n60_dates = list(c60.index)
-
-        gm, dm = [], []
-        for i in gc_idx:
-            if i < len(close) and close.index[i] in n60_dates:
-                p = n60_dates.index(close.index[i])
-                gm.append({'x': p, 'y': round(float(close.iloc[i]), 2)})
-        for i in dc_idx:
-            if i < len(close) and close.index[i] in n60_dates:
-                p = n60_dates.index(close.index[i])
-                dm.append({'x': p, 'y': round(float(close.iloc[i]), 2)})
 
         stocks.append({
             'ticker':   sym,
@@ -159,8 +148,6 @@ for sym in TICKERS:
             'ma75d':    to_list(ma75.tail(N), 2),
             'macd_d':   to_list(macd_s.tail(N), 4),
             'sig_d':    to_list(sig_s.tail(N), 4),
-            'gm':       gm,
-            'dm':       dm,
         })
         print("ok")
     except Exception as e:
@@ -570,8 +557,6 @@ function renderPriceChart(s) {
     {label:'MA25',  data:s.ma25d,  borderColor:'#d4a017', borderWidth:1.2, pointRadius:0, tension:0.3, fill:false, order:2},
     {label:'MA75',  data:s.ma75d,  borderColor:'#8b949e', borderWidth:1,   borderDash:[4,2], pointRadius:0, tension:0.3, fill:false, order:1},
   ];
-  if (s.gm?.length) datasets.push({label:'GC', type:'scatter', data:s.gm.map(p=>({x:p.x,y:p.y})), pointStyle:'triangle', pointRadius:8, borderColor:'#d4a017', backgroundColor:'#d4a017', order:0});
-  if (s.dm?.length) datasets.push({label:'DC', type:'scatter', data:s.dm.map(p=>({x:p.x,y:p.y})), pointStyle:'triangle', pointRotation:180, pointRadius:8, borderColor:'#8b949e', backgroundColor:'#8b949e', order:0});
   new Chart(cv, {
     type:'line', data:{labels:s.dates, datasets},
     options:{responsive:true, maintainAspectRatio:false, animation:false,
