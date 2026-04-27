@@ -233,18 +233,14 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 /* ── Cards ────────────────────────────────────────────────────── */
 .cards-section{padding:6px 14px;padding-bottom:max(40px,calc(env(safe-area-inset-bottom) + 24px))}
 .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr));gap:12px}
-.card{background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden;scroll-margin-top:50px;position:relative}
+.card{background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden;scroll-margin-top:50px}
 .card:hover{border-color:#58a6ff44}
-
-/* Remove button */
-.remove-btn{position:absolute;top:6px;right:8px;width:22px;height:22px;border-radius:50%;background:transparent;border:none;color:#484f58;font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;z-index:10;transition:all .12s;padding:0}
-.remove-btn:hover,.remove-btn:active{background:#3d1a1a;color:#f85149}
 
 .status-bar{height:4px;width:100%}
 .status-bar.bullish{background:linear-gradient(90deg,#238636,#2ea043)}
 .status-bar.bearish{background:linear-gradient(90deg,#da3633,#f85149)}
 .status-bar.neutral{background:linear-gradient(90deg,#9e6a03,#d29922)}
-.card-header{padding:10px 30px 5px 12px}
+.card-header{padding:10px 12px 5px}
 .ticker-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .ticker{font-size:18px;font-weight:800;color:#e6edf3}
 .company-name{font-size:10px;color:#8b949e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
@@ -367,8 +363,7 @@ const LS = {
   get: (k, def) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? def; } catch { return def; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
-let hiddenSet = new Set(LS.get('wl_hidden', []));
-let sortMode  = LS.get('wl_sort', 'sector');
+let sortMode = LS.get('wl_sort', 'sector');
 if (!['sector','up','down','rsi'].includes(sortMode)) sortMode = 'sector';
 
 // ── Save Page ─────────────────────────────────────────────────────────────────
@@ -462,7 +457,6 @@ function buildCard(s) {
   const hasCharts = s.prices && s.prices.length > 0;
 
   return `
-    <button class="remove-btn" onclick="hideStock('${s.ticker}')" title="削除">×</button>
     <div class="status-bar ${s.status}"></div>
     <div class="card-header">
       <div class="ticker-row">
@@ -507,7 +501,7 @@ function buildCard(s) {
 let ioRef = null;
 
 function getVisibleStocks() {
-  const all = [...STOCKS].filter(s => !hiddenSet.has(s.ticker));
+  const all = [...STOCKS];
   if (sortMode === 'up')   return [...all].sort((a,b) => b.pct - a.pct);
   if (sortMode === 'down') return [...all].sort((a,b) => a.pct - b.pct);
   if (sortMode === 'rsi')  return [...all].sort((a,b) => (b.rsi||0) - (a.rsi||0));
@@ -592,14 +586,6 @@ function setSort(mode) {
   });
   renderAll();
 }
-
-// ── Hide / Restore ────────────────────────────────────────────────────────────
-function hideStock(ticker) {
-  hiddenSet.add(ticker);
-  LS.set('wl_hidden', [...hiddenSet]);
-  renderAll();
-}
-
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 // ページロード時にハッシュを消してトップに戻る
