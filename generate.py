@@ -212,8 +212,6 @@ button{cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparen
 h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .gen-time{font-size:10px;color:#8b949e}
 .header-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.hdr-btn{display:inline-flex;align-items:center;gap:3px;padding:7px 10px;border-radius:6px;font-size:11px;font-weight:600;background:#1c2128;color:#e6edf3;border:1px solid #30363d;touch-action:manipulation}
-.hdr-btn:active{background:#2d333b}
 
 /* ── Heatmap ──────────────────────────────────────────────────── */
 .heatmap-section{padding:10px 14px 6px}
@@ -329,7 +327,6 @@ canvas{display:block}
   </div>
   <div class="header-right">
     <span id="stock-count" style="font-size:10px;color:#8b949e"></span>
-    <button class="hdr-btn" onclick="savePage()">💾 保存</button>
   </div>
 </div>
 
@@ -365,16 +362,6 @@ const LS = {
 };
 let sortMode = LS.get('wl_sort', 'sector');
 if (!['sector','up','down','rsi'].includes(sortMode)) sortMode = 'sector';
-
-// ── Save Page ─────────────────────────────────────────────────────────────────
-function savePage() {
-  const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
-  const a = Object.assign(document.createElement('a'), {
-    href: URL.createObjectURL(new Blob([html], {type:'text/html;charset=utf-8'})),
-    download: 'dashboard.html',
-  });
-  a.click(); URL.revokeObjectURL(a.href);
-}
 
 // ── Heatmap ───────────────────────────────────────────────────────────────────
 function pctToColor(pct) {
