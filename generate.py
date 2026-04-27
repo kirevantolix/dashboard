@@ -345,7 +345,7 @@ canvas{display:block}
   <button class="sort-btn active" id="sort-sector" onclick="setSort('sector')">☰ セクター順</button>
   <button class="sort-btn" id="sort-up"     onclick="setSort('up')">▲ 値上がり</button>
   <button class="sort-btn" id="sort-down"   onclick="setSort('down')">▼ 値下がり</button>
-  <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">RSI↓</button>
+  <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">▼ RSI</button>
 </div>
 <div class="cards-section">
   <div class="cards-grid" id="cards"></div>
