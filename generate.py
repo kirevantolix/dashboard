@@ -297,7 +297,7 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 
 /* Charts */
 .charts-row{display:flex;gap:8px;padding:8px 12px 6px}
-.gauge-wrap{display:flex;flex-direction:column;align-items:center;min-width:110px;flex-shrink:0}
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;width:110px;flex-shrink:0}
 .gauge-label{font-size:10px;color:#8b949e;margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px}
 .gauge-status{font-size:9px;color:#8b949e;margin-top:2px;text-align:center}
 .price-chart-wrap{flex:1;min-height:120px;position:relative;min-width:0}
@@ -305,7 +305,7 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .macd-label{font-size:10px;color:#8b949e;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px}
 .macd-chart-wrap{height:60px;position:relative}
 canvas{display:block}
-.gauge-wrap svg{width:100%;height:auto;max-width:108px}
+.gauge-wrap svg{width:100%;max-width:108px;height:auto;aspect-ratio:100/58}
 
 
 /* ── Tablet / Mobile ──────────────────────────────────────────── */
@@ -326,7 +326,7 @@ canvas{display:block}
   .price{font-size:20px}
   .ticker{font-size:16px}
   .charts-row{padding:7px 10px 5px}
-  .gauge-wrap{min-width:100px}
+  .gauge-wrap{width:100px}
   .price-chart-wrap{min-height:115px}
   .macd-chart-wrap{height:54px}
   .divider{margin:0 10px}
@@ -338,7 +338,7 @@ canvas{display:block}
   .hm-cell{min-width:46px;font-size:9px}
   .ticker{font-size:15px}
   .price{font-size:18px}
-  .gauge-wrap{min-width:90px}
+  .gauge-wrap{width:90px}
 }
 </style>
 </head>
@@ -439,7 +439,7 @@ function rsiGaugeSVG(rsi) {
   const nRad=(1-rsi/100)*Math.PI;
   const nx=(cx+30*Math.cos(nRad)).toFixed(1), ny=(cy-30*Math.sin(nRad)).toFixed(1);
   const nc=rsi>=70?'#f85149':rsi<=30?'#388bfd':'#6e7681';
-  return `<svg viewBox="0 0 100 58" style="display:block;width:100%;max-width:108px;height:auto">
+  return `<svg viewBox="0 0 100 58" width="100" height="58" style="display:block;width:100%;max-width:108px">
     <path d="M 12,${cy} A ${R},${R} 0 0,1 ${bx.toFixed(1)},${by.toFixed(1)}" stroke="#388bfd" stroke-width="7" fill="none"/>
     <path d="M ${bx.toFixed(1)},${by.toFixed(1)} A ${R},${R} 0 0,1 ${rx2.toFixed(1)},${ry2.toFixed(1)}" stroke="#484f58" stroke-width="7" fill="none"/>
     <path d="M ${rx2.toFixed(1)},${ry2.toFixed(1)} A ${R},${R} 0 0,1 88,${cy}" stroke="#f85149" stroke-width="7" fill="none"/>
