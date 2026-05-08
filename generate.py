@@ -54,12 +54,11 @@ def make_touch_icon():
         d.line([pts[i], pts[i + 1]], fill=white, width=7)
     ax, ay = pts[-1]
     d.polygon([(ax, ay - 12), (ax + 12, ay + 6), (ax - 12, ay + 6)], fill=white)
+    return img
 
-    buf = io.BytesIO()
-    img.save(buf, format='PNG')
-    return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
-
-TOUCH_ICON = make_touch_icon()
+icon_img = make_touch_icon()
+icon_img.save('apple-touch-icon.png')
+icon_img.save('favicon.png')
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -237,8 +236,8 @@ HTML = r"""<!DOCTYPE html>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Watchlist">
-<link rel="apple-touch-icon" href="TOUCH_ICON_PLACEHOLDER">
-<link rel="icon" href="TOUCH_ICON_PLACEHOLDER">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon.png">
 <title>Watchlist</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -648,7 +647,6 @@ renderAll();
 HTML = HTML.replace('STOCKS_JSON_PLACEHOLDER', stocks_json)
 HTML = HTML.replace('GENERATED_AT_PLACEHOLDER', now_str)
 HTML = HTML.replace('QUOTE_PLACEHOLDER', daily_quote)
-HTML = HTML.replace('TOUCH_ICON_PLACEHOLDER', TOUCH_ICON)
 
 with open('dashboard.html', 'w', encoding='utf-8') as f:
     f.write(HTML)
