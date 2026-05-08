@@ -6,11 +6,14 @@ Reads tickers.txt (1 ticker per line). Falls back to built-in list if not found.
 
 import os
 import random
+import base64
+import io
 import yfinance as yf
 import pandas as pd
 import json
 import math
 from datetime import datetime, timezone, timedelta
+from PIL import Image, ImageDraw
 
 # ── Tickers ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +30,36 @@ if os.path.exists('tickers.txt'):
 else:
     TICKERS = _DEFAULT_TICKERS
     print(f"tickers.txt not found — using default {len(TICKERS)} tickers")
+
+# ── Touch Icon ─────────────────────────────────────────────────────────────────
+
+def make_touch_icon():
+    S = 180
+    img = Image.new('RGB', (S, S), (22, 27, 34))
+    d   = ImageDraw.Draw(img)
+    green = (63, 185, 80)
+    white = (230, 237, 243)
+
+    bar_w, gap = 16, 8
+    heights = [38, 22, 50, 34, 62, 46, 80]
+    x0, base_y = 14, 155
+
+    for i, h in enumerate(heights):
+        lx = x0 + i * (bar_w + gap)
+        d.rectangle([lx, base_y - h, lx + bar_w, base_y], fill=green)
+
+    cx = [x0 + i * (bar_w + gap) + bar_w // 2 for i in range(len(heights))]
+    pts = list(zip(cx, [base_y - h for h in heights]))
+    for i in range(len(pts) - 1):
+        d.line([pts[i], pts[i + 1]], fill=white, width=7)
+    ax, ay = pts[-1]
+    d.polygon([(ax, ay - 12), (ax + 12, ay + 6), (ax - 12, ay + 6)], fill=white)
+
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode()
+
+TOUCH_ICON = make_touch_icon()
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -203,7 +236,10 @@ HTML = r"""<!DOCTYPE html>
 <meta http-equiv="refresh" content="10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Stock Watchlist</title>
+<meta name="apple-mobile-web-app-title" content="Watchlist">
+<link rel="apple-touch-icon" href="TOUCH_ICON_PLACEHOLDER">
+<link rel="icon" href="TOUCH_ICON_PLACEHOLDER">
+<title>Watchlist</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
 /* ── Reset & Base ─────────────────────────────────────────────── */
@@ -612,6 +648,7 @@ renderAll();
 HTML = HTML.replace('STOCKS_JSON_PLACEHOLDER', stocks_json)
 HTML = HTML.replace('GENERATED_AT_PLACEHOLDER', now_str)
 HTML = HTML.replace('QUOTE_PLACEHOLDER', daily_quote)
+HTML = HTML.replace('TOUCH_ICON_PLACEHOLDER', TOUCH_ICON)
 
 with open('dashboard.html', 'w', encoding='utf-8') as f:
     f.write(HTML)

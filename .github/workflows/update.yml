@@ -35,7 +35,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install yfinance requests
+        run: pip install yfinance requests pillow
 
       - name: Generate dashboard.html
         run: python generate.py
