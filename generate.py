@@ -220,6 +220,8 @@ button{cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparen
 h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .gen-time{font-size:10px;color:#8b949e}
 .header-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.update-link{display:inline-flex;align-items:center;gap:3px;padding:5px 9px;border-radius:6px;font-size:11px;font-weight:600;background:#1c2128;color:#e6edf3;border:1px solid #30363d;text-decoration:none;white-space:nowrap}
+.update-link:hover{background:#2d333b;text-decoration:none}
 
 /* ── Quote ────────────────────────────────────────────────────── */
 .quote-section{padding:8px 14px 4px;display:flex;align-items:center;gap:6px}
@@ -340,6 +342,7 @@ canvas{display:block}
   </div>
   <div class="header-right">
     <span id="stock-count" style="font-size:10px;color:#8b949e"></span>
+    <a class="update-link" href="https://github.com/kirevantolix/dashboard/actions/workflows/update.yml" target="_blank" rel="noopener">🔄 更新</a>
   </div>
 </div>
 
