@@ -44,10 +44,10 @@ jobs:
       - name: Prepare site
         run: |
           mkdir _site
-          # index.html → ルートURL (username.github.io/repo/) で開ける
           cp dashboard.html _site/index.html
-          # dashboard.html → 元のURLでも開ける
           cp dashboard.html _site/dashboard.html
+          cp apple-touch-icon.png _site/apple-touch-icon.png
+          cp favicon.png _site/favicon.png
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
