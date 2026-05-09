@@ -364,6 +364,10 @@ canvas{display:block}
   .price{font-size:18px}
   .gauge-wrap{width:90px}
 }
+/* ── Scroll to top ────────────────────────────────────────────── */
+#totop{position:fixed;bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .25s,background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
+#totop.visible{opacity:1;pointer-events:auto}
+#totop:hover{background:rgba(255,255,255,.16)}
 </style>
 </head>
 <body>
@@ -401,6 +405,8 @@ canvas{display:block}
   <button class="sort-btn" id="sort-down"   onclick="setSort('down')">▼ 値下がり</button>
   <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">▲ RSI</button>
 </div>
+<button id="totop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="トップへ戻る">▲</button>
+
 <div class="cards-section">
   <div class="cards-grid" id="cards"></div>
 </div>
@@ -640,6 +646,12 @@ document.getElementById(`sort-${sortMode}`)?.classList.add('active');
 ['sector','up','down'].filter(m=>m!==sortMode).forEach(m=>document.getElementById(`sort-${m}`)?.classList.remove('active'));
 
 renderAll();
+
+// トップへ戻るボタン
+const toTopBtn = document.getElementById('totop');
+window.addEventListener('scroll', () => {
+  toTopBtn.classList.toggle('visible', window.scrollY > 300);
+}, {passive: true});
 </script>
 </body>
 </html>
