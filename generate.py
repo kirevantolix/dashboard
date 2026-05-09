@@ -208,8 +208,8 @@ def fetch_ticker(sym):
 
 INDICES_DEF = [
     ('USD/JPY', 'USDJPY=X'),
-    ('NDX',     '^NDX'),
     ('DOW',     '^DJI'),
+    ('NDX',     '^NDX'),
     ('SOX',     '^SOX'),
     ('VIX',     '^VIX'),
 ]
