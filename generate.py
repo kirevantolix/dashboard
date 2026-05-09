@@ -604,8 +604,7 @@ function renderPriceChart(s) {
   new Chart(cv, {
     type:'line', data:{labels:s.dates, datasets},
     options:{responsive:true, maintainAspectRatio:false, animation:false,
-      events:[],
-      plugins:{legend:{display:false}, tooltip:{enabled:false}},
+      plugins:{legend:{display:false}, tooltip:Object.assign(tipBase(),{mode:'index',intersect:false,callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y??''}`}})},
       scales:{x:axisX(), y:axisY()}},
   });
 }
@@ -621,8 +620,7 @@ function renderMacdChart(s) {
       {label:'Signal', data:s.sig_d,  borderColor:'#f0883e', borderWidth:1.2, borderDash:[3,2], pointRadius:0, tension:0.2, fill:false, order:2},
     ]},
     options:{responsive:true, maintainAspectRatio:false, animation:false,
-      events:[],
-      plugins:{legend:{display:false}, tooltip:{enabled:false}},
+      plugins:{legend:{display:false}, tooltip:Object.assign(tipBase(),{mode:'index',intersect:false})},
       scales:{x:axisX({ticks:{display:false}}), y:axisY({ticks:{maxTicksLimit:3,font:{size:8}}})}},
   });
 }
