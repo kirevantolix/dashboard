@@ -206,9 +206,39 @@ def fetch_ticker(sym):
         'sig_d':    to_list(sig_s.tail(N), 4),
     }, 'ok'
 
+INDICES_DEF = [
+    ('USD/JPY', 'USDJPY=X'),
+    ('NDX',     '^NDX'),
+    ('DOW',     '^DJI'),
+    ('SOX',     '^SOX'),
+    ('VIX',     '^VIX'),
+]
+
+def fetch_index(label, sym):
+    tk  = yf.Ticker(sym)
+    h   = tk.history(period='5d')
+    if len(h) < 2:
+        return {'label': label, 'price': None, 'pct': 0}
+    cur  = float(h['Close'].iloc[-1])
+    prev = float(h['Close'].iloc[-2])
+    pct  = round((cur - prev) / prev * 100, 2)
+    # 表示フォーマット
+    if sym == 'USDJPY=X':
+        price_str = f'{cur:.2f}'
+    elif cur >= 1000:
+        price_str = f'{cur:,.0f}'
+    else:
+        price_str = f'{cur:.2f}'
+    return {'label': label, 'price': price_str, 'pct': pct}
+
 results = {}
+indices = []
 with ThreadPoolExecutor(max_workers=8) as ex:
+    # 銘柄
     futures = {ex.submit(fetch_ticker, sym): sym for sym in TICKERS}
+    # 指数
+    idx_futures = {ex.submit(fetch_index, lbl, sym): lbl for lbl, sym in INDICES_DEF}
+
     for fut in as_completed(futures):
         sym = futures[fut]
         try:
@@ -218,6 +248,17 @@ with ThreadPoolExecutor(max_workers=8) as ex:
         except Exception as e:
             results[sym] = (None, f'ERROR: {e}')
             print(f"  {sym:8s} ERROR: {e}")
+
+    for fut in as_completed(idx_futures):
+        lbl = idx_futures[fut]
+        try:
+            indices.append(fut.result())
+        except Exception as e:
+            indices.append({'label': lbl, 'price': None, 'pct': 0})
+
+# 指数を定義順に並べ直す
+lbl_order = [lbl for lbl, _ in INDICES_DEF]
+indices.sort(key=lambda x: lbl_order.index(x['label']) if x['label'] in lbl_order else 99)
 
 stocks = [results[sym][0] for sym in TICKERS if results.get(sym, (None,))[0] is not None]
 
@@ -259,7 +300,8 @@ daily_quote = random.choice(QUOTES)
 
 JST = timezone(timedelta(hours=9))
 now_str = datetime.now(JST).strftime('%Y-%m-%d %H:%M JST')
-stocks_json = json.dumps(stocks, ensure_ascii=False)
+stocks_json  = json.dumps(stocks,  ensure_ascii=False)
+indices_json = json.dumps(indices, ensure_ascii=False)
 
 # ── HTML Template ──────────────────────────────────────────────────────────────
 
@@ -312,6 +354,10 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .hm-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:60px;min-height:40px;border-radius:6px;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid rgba(255,255,255,.08);transition:transform .12s;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;text-decoration:none;touch-action:manipulation}
 .hm-cell:hover,.hm-cell:active{transform:scale(1.1);z-index:2}
 .hm-cell .hm-pct{font-size:9px;font-weight:400;margin-top:1px}
+.idx-heatmap{flex-wrap:nowrap;margin-bottom:0}
+.idx-heatmap .hm-cell{flex:1;min-width:0}
+.idx-heatmap .hm-price{font-size:9px;font-weight:400;margin-top:1px;opacity:.85}
+.idx-divider{height:1px;background:#30363d;margin:5px 0}
 
 /* ── Sort Bar ─────────────────────────────────────────────────── */
 .sort-bar{display:flex;align-items:center;gap:6px;padding:8px 14px 4px;flex-wrap:wrap}
@@ -443,6 +489,8 @@ canvas{display:block}
 <!-- Heatmap -->
 <div class="heatmap-section">
   <h2>Heatmap — Daily Change</h2>
+  <div class="heatmap idx-heatmap" id="idx-heatmap"></div>
+  <div class="idx-divider"></div>
   <div class="heatmap" id="heatmap"></div>
 </div>
 
@@ -462,7 +510,8 @@ canvas{display:block}
 
 
 <script>
-const STOCKS = STOCKS_JSON_PLACEHOLDER;
+const STOCKS  = STOCKS_JSON_PLACEHOLDER;
+const INDICES = INDICES_JSON_PLACEHOLDER;
 const GENERATED_AT = 'GENERATED_AT_PLACEHOLDER';
 
 document.getElementById('gen-time').textContent = GENERATED_AT;
@@ -481,6 +530,20 @@ function pctToColor(pct) {
   return pct >= 0
     ? `rgb(${Math.round(20+t*10)},${Math.round(56+t*100)},${Math.round(20+t*10)})`
     : `rgb(${Math.round(100+t*155)},${Math.round(20+(1-t)*36)},${Math.round(20+(1-t)*36)})`;
+}
+
+function renderIndexHeatmap() {
+  const hm = document.getElementById('idx-heatmap');
+  hm.innerHTML = '';
+  INDICES.forEach(ix => {
+    const cell = document.createElement('div');
+    cell.className = 'hm-cell';
+    cell.style.background = pctToColor(ix.pct);
+    cell.style.color = Math.abs(ix.pct) > 2 ? '#fff' : '#e6edf3';
+    const sign = ix.pct >= 0 ? '+' : '';
+    cell.innerHTML = `<span>${ix.label}</span><span class="hm-price">${ix.price ?? '—'}</span><span class="hm-pct">${sign}${ix.pct}%</span>`;
+    hm.appendChild(cell);
+  });
 }
 
 function renderHeatmap(stocks) {
@@ -619,6 +682,7 @@ function renderAll() {
   const visible = getVisibleStocks();
   document.getElementById('stock-count').textContent = visible.length + ' stocks';
 
+  renderIndexHeatmap();
   renderHeatmap(visible);
 
   const grid = document.getElementById('cards');
@@ -717,7 +781,8 @@ window.addEventListener('scroll', () => {
 </html>
 """
 
-HTML = HTML.replace('STOCKS_JSON_PLACEHOLDER', stocks_json)
+HTML = HTML.replace('STOCKS_JSON_PLACEHOLDER',  stocks_json)
+HTML = HTML.replace('INDICES_JSON_PLACEHOLDER', indices_json)
 HTML = HTML.replace('GENERATED_AT_PLACEHOLDER', now_str)
 HTML = HTML.replace('QUOTE_PLACEHOLDER', daily_quote)
 
