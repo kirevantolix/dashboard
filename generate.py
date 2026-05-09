@@ -932,20 +932,31 @@ async function updateTickers() {
   btn.disabled = true;
 
   try {
-    // 1. SHAを取得
-    const getRes = await fetch(
-      `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}&t=${Date.now()}`,
-      { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' } }
-    );
-    if (!getRes.ok) {
-      const err = await getRes.json().catch(() => ({}));
-      throw new Error(`SHA取得失敗 (${getRes.status}): ${err.message || ''}`);
-    }
+    // ── 1. SHA取得 ────────────────────────────────────────────────
+    const getUrl = `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}&t=${Date.now()}`;
+    console.log('[maint] GET', getUrl);
+    const getRes = await fetch(getUrl, {
+      headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' }
+    });
     const getData = await getRes.json();
-    const sha = getData.sha;
+    console.log('[maint] GET status:', getRes.status, getData);
 
-    // 2. tickers.txt をPUT
-    const newContent = btoa(_tickers.join('\n') + '\n');
+    if (getRes.status !== 200) {
+      throw new Error(`SHA取得失敗 (${getRes.status}): ${getData.message || ''}`);
+    }
+    const sha = getData.sha;
+    console.log('[maint] SHA:', sha);
+
+    // ── 2. tickers.txt をPUT ──────────────────────────────────────
+    const rawContent = _tickers.join('\n') + '\n';
+    console.log('[maint] 書き込む内容:\n' + rawContent);
+    // btoa はASCIIのみ対応。ティッカーは必ずASCIIなので問題なし
+    const encoded = btoa(rawContent);
+    console.log('[maint] base64:', encoded);
+
+    const putBody = { message: 'Update tickers via dashboard', content: encoded, sha, branch: BRANCH };
+    console.log('[maint] PUT body:', JSON.stringify(putBody));
+
     const putRes = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`, {
       method: 'PUT',
       headers: {
@@ -953,15 +964,17 @@ async function updateTickers() {
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ message: 'Update tickers via dashboard', content: newContent, sha, branch: BRANCH })
+      body: JSON.stringify(putBody)
     });
-    if (!putRes.ok) {
-      const err = await putRes.json().catch(() => ({}));
-      throw new Error(`書き込み失敗 (${putRes.status}): ${err.message || JSON.stringify(err)}`);
+    const putData = await putRes.json();
+    console.log('[maint] PUT status:', putRes.status, putData);
+
+    if (putRes.status !== 200 && putRes.status !== 201) {
+      throw new Error(`書き込み失敗 (${putRes.status}): ${putData.message || JSON.stringify(putData)}`);
     }
 
-    // 3. workflow_dispatch でActions起動
-    await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/update.yml/dispatches`, {
+    // ── 3. workflow_dispatch でActions起動 ────────────────────────
+    const dispRes = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/update.yml/dispatches`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -970,9 +983,11 @@ async function updateTickers() {
       },
       body: JSON.stringify({ ref: BRANCH })
     });
+    console.log('[maint] dispatch status:', dispRes.status);
 
     alert('更新しました');
   } catch (e) {
+    console.error('[maint] エラー:', e);
     alert('エラー: ' + e.message);
   }
 
