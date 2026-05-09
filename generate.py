@@ -456,7 +456,7 @@ canvas{display:block}
   .gauge-wrap{width:90px}
 }
 /* ── Search ───────────────────────────────────────────────────── */
-#search-btn{position:fixed;bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px));right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
+#search-btn{position:fixed;bottom:max(120px,calc(env(safe-area-inset-bottom) + 112px));right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
 #search-btn:hover{background:rgba(255,255,255,.16)}
 #search-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:flex-start;justify-content:center;padding-top:80px}
 #search-overlay.open{display:flex}
@@ -468,9 +468,11 @@ canvas{display:block}
 .shake{animation:shake .35s ease}
 
 /* ── Scroll to top ────────────────────────────────────────────── */
-#totop{position:fixed;bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .25s,background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
-#totop.visible{opacity:1;pointer-events:auto}
-#totop:hover{background:rgba(255,255,255,.16)}
+#totop,#tobottom{position:fixed;right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .25s,background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
+#totop{bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px));opacity:0;pointer-events:none}
+#tobottom{bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));opacity:0;pointer-events:none}
+#totop.visible,#tobottom.visible{opacity:1;pointer-events:auto}
+#totop:hover,#tobottom:hover{background:rgba(255,255,255,.16)}
 </style>
 </head>
 <body>
@@ -525,6 +527,7 @@ canvas{display:block}
 </div>
 
 <button id="totop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="トップへ戻る">▲</button>
+<button id="tobottom" onclick="window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})" aria-label="一番下へ">▼</button>
 
 <div class="cards-section">
   <div class="cards-grid" id="cards"></div>
@@ -823,8 +826,11 @@ function doSearch() {
 
 // トップへ戻るボタン
 const toTopBtn = document.getElementById('totop');
+const toBotBtn = document.getElementById('tobottom');
 window.addEventListener('scroll', () => {
-  toTopBtn.classList.toggle('visible', window.scrollY > 300);
+  const scrolled = window.scrollY > 300;
+  toTopBtn.classList.toggle('visible', scrolled);
+  toBotBtn.classList.toggle('visible', scrolled);
 }, {passive: true});
 </script>
 </body>
