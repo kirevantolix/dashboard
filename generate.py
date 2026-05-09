@@ -575,8 +575,8 @@ canvas{display:block}
     <div class="sf-item" onclick="setSort('sector')">  <span class="sf-check" id="ck-sector"></span>セクター順</div>
     <div class="sf-item" onclick="setSort('up')">      <span class="sf-check" id="ck-up"></span>値上がり順</div>
     <div class="sf-item" onclick="setSort('down')">    <span class="sf-check" id="ck-down"></span>値下がり順</div>
-    <div class="sf-item" onclick="setSort('rsi-desc')"><span class="sf-check" id="ck-rsi-desc"></span>RSI 降順</div>
-    <div class="sf-item" onclick="setSort('rsi-asc')"> <span class="sf-check" id="ck-rsi-asc"></span>RSI 昇順</div>
+    <div class="sf-item" onclick="setSort('rsi-desc')"><span class="sf-check" id="ck-rsi-desc"></span>RSI High</div>
+    <div class="sf-item" onclick="setSort('rsi-asc')"> <span class="sf-check" id="ck-rsi-asc"></span>RSI Low</div>
   </div>
 
   <!-- Filter popup -->
@@ -618,7 +618,7 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 // ── Sort & Filter state ───────────────────────────────────────────────────────
-const SORT_LABELS = {sector:'セクター順', up:'値上がり順', down:'値下がり順', 'rsi-desc':'RSI 降順', 'rsi-asc':'RSI 昇順'};
+const SORT_LABELS = {sector:'セクター順', up:'値上がり順', down:'値下がり順', 'rsi-desc':'RSI High', 'rsi-asc':'RSI Low'};
 let sortMode = LS.get('wl_sort', 'sector');
 if (!SORT_LABELS[sortMode]) sortMode = 'sector';
 
