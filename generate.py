@@ -351,7 +351,8 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .heatmap-section{padding:10px 14px 6px}
 .heatmap-section h2{font-size:10px;color:#8b949e;margin-bottom:7px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
 .heatmap{display:flex;flex-wrap:wrap;gap:3px}
-.hm-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:60px;min-height:40px;border-radius:6px;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid rgba(255,255,255,.08);transition:transform .12s;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;text-decoration:none;touch-action:manipulation}
+.hm-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;min-height:40px;border-radius:6px;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid rgba(255,255,255,.08);transition:transform .12s;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;text-decoration:none;touch-action:manipulation}
+.heatmap:not(.idx-heatmap) .hm-cell{width:calc((100% - 30px) / 11);flex:none}
 .hm-cell:hover,.hm-cell:active{transform:scale(1.1);z-index:2}
 .hm-cell .hm-pct{font-size:9px;font-weight:400;margin-top:1px}
 .idx-heatmap{flex-wrap:nowrap;margin-bottom:0}
@@ -430,7 +431,8 @@ canvas{display:block}
   .header{padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
   h1{font-size:15px}
   .heatmap-section{padding:8px 10px 5px}
-  .hm-cell{min-width:52px;min-height:37px;font-size:10px;padding:3px 4px;border-radius:5px}
+  .hm-cell{min-height:37px;font-size:10px;padding:3px 4px;border-radius:5px}
+  .heatmap:not(.idx-heatmap) .hm-cell{width:calc((100% - 18px) / 7);flex:none}
   .hm-cell .hm-pct{font-size:8px}
   .sort-bar{padding:6px 10px 3px;gap:5px}
   .cards-section{padding:5px 10px;padding-bottom:max(36px,calc(env(safe-area-inset-bottom) + 20px))}
@@ -448,7 +450,7 @@ canvas{display:block}
   .sort-btn{padding:8px 14px}
 }
 @media(max-width:375px){
-  .hm-cell{min-width:46px;font-size:9px}
+  .hm-cell{font-size:9px}
   .ticker{font-size:15px}
   .price{font-size:18px}
   .gauge-wrap{width:90px}
