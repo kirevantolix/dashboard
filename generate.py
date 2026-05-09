@@ -340,13 +340,6 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .quote-mark{font-size:16px;color:#30363d;line-height:1;flex-shrink:0}
 .quote-text{font-size:11px;color:#8b949e;font-style:italic;letter-spacing:.3px}
 
-/* ── Memo ─────────────────────────────────────────────────────── */
-.memo-section{padding:4px 14px 6px}
-.memo-label{font-size:10px;color:#8b949e;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
-.memo-box{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:7px 10px;color:#e6edf3;font-size:12px;line-height:1.5;font-family:inherit;min-height:32px;outline:none;transition:border-color .2s;word-break:break-word;white-space:pre-wrap}
-.memo-box:focus{border-color:#58a6ff}
-.memo-box:empty::before{content:'...';color:#484f58;pointer-events:none}
-
 /* ── Heatmap ──────────────────────────────────────────────────── */
 .heatmap-section{padding:10px 14px 6px}
 .heatmap-section h2{font-size:10px;color:#8b949e;margin-bottom:7px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
@@ -366,6 +359,14 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .sort-btn{padding:7px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #30363d;background:#1c2128;color:#8b949e;transition:all .12s;touch-action:manipulation}
 .sort-btn.active{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff}
 .sort-btn:active{opacity:.7}
+
+/* ── Search Bar ───────────────────────────────────────────────── */
+.search-bar{padding:4px 14px 6px;display:flex;gap:6px}
+.search-input{flex:1;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:7px 10px;color:#e6edf3;font-size:12px;line-height:1.5;font-family:inherit;outline:none;transition:border-color .2s;text-transform:uppercase}
+.search-input::placeholder{text-transform:none;color:#484f58}
+.search-input:focus{border-color:#58a6ff}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+.search-input.shake{animation:shake .35s ease}
 
 /* ── Cards ────────────────────────────────────────────────────── */
 .cards-section{padding:6px 14px;padding-bottom:max(40px,calc(env(safe-area-inset-bottom) + 24px))}
@@ -435,6 +436,7 @@ canvas{display:block}
   .heatmap:not(.idx-heatmap) .hm-cell{width:calc((100% - 18px) / 7);flex:none}
   .hm-cell .hm-pct{font-size:8px}
   .sort-bar{padding:6px 10px 3px;gap:5px}
+  .search-bar{padding:3px 10px 5px}
   .cards-section{padding:5px 10px;padding-bottom:max(36px,calc(env(safe-area-inset-bottom) + 20px))}
   .cards-grid{grid-template-columns:1fr;gap:10px}
   .card{border-radius:8px}
@@ -542,12 +544,6 @@ canvas{display:block}
   <span class="quote-mark">"</span>
 </div>
 
-<!-- Memo -->
-<div class="memo-section">
-  <div class="memo-label">MEMO</div>
-  <div class="memo-box" id="memo" contenteditable="true" spellcheck="false"></div>
-</div>
-
 <!-- Heatmap -->
 <div class="heatmap-section">
   <h2>Heatmap — Daily Change</h2>
@@ -556,13 +552,18 @@ canvas{display:block}
   <div class="heatmap" id="heatmap"></div>
 </div>
 
-<!-- Sort Bar + Cards -->
+<!-- Sort Bar + Search + Cards -->
 <div class="sort-bar">
   <span class="sort-label">並び替え:</span>
   <button class="sort-btn active" id="sort-sector" onclick="setSort('sector')">☰ セクター順</button>
   <button class="sort-btn" id="sort-up"     onclick="setSort('up')">▲ 値上がり</button>
   <button class="sort-btn" id="sort-down"   onclick="setSort('down')">▼ 値下がり</button>
   <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">▲ RSI</button>
+</div>
+<div class="search-bar">
+  <input class="search-input" id="search-input" type="text" placeholder="🔍 銘柄を検索..."
+    autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+    onkeydown="if(event.key==='Enter')doSearch()">
 </div>
 <button id="totop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="トップへ戻る">▲</button>
 <button id="tobottom" onclick="window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})" aria-label="一番下へ">▼</button>
@@ -829,10 +830,22 @@ document.getElementById(`sort-${sortMode}`)?.classList.add('active');
 
 renderAll();
 
-// Memo
-const memoEl = document.getElementById('memo');
-memoEl.textContent = localStorage.getItem('wl_memo') || '';
-memoEl.addEventListener('input', () => localStorage.setItem('wl_memo', memoEl.textContent));
+// ── Search ────────────────────────────────────────────────────────────────────
+function doSearch() {
+  const raw = document.getElementById('search-input').value.trim().toUpperCase();
+  if (!raw) return;
+  const card = document.getElementById(`card-${raw}`);
+  if (card) {
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('search-input').blur();
+  } else {
+    const inp = document.getElementById('search-input');
+    inp.classList.remove('shake');
+    void inp.offsetWidth; // reflow で再アニメーション
+    inp.classList.add('shake');
+    inp.addEventListener('animationend', () => inp.classList.remove('shake'), { once: true });
+  }
+}
 
 // ── Maintenance ──────────────────────────────────────────────────────────────
 const REPO = 'kirevantolix/dashboard';
