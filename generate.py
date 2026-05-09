@@ -361,12 +361,14 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .sort-btn:active{opacity:.7}
 
 /* ── Search Bar ───────────────────────────────────────────────── */
-.search-bar{padding:4px 14px 6px;display:flex;gap:6px}
-.search-input{flex:1;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:7px 10px;color:#e6edf3;font-size:12px;line-height:1.5;font-family:inherit;outline:none;transition:border-color .2s;text-transform:uppercase}
+.search-bar{padding:4px 14px 6px}
+.search-wrap{display:flex;align-items:center;gap:8px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:7px 10px;transition:border-color .2s}
+.search-wrap:focus-within{border-color:#58a6ff}
+.search-icon{color:#484f58;font-size:13px;flex-shrink:0;line-height:1;pointer-events:none}
+.search-input{flex:1;background:none;border:none;outline:none;color:#e6edf3;font-size:12px;font-family:inherit;padding:0;min-width:0;text-transform:uppercase}
 .search-input::placeholder{text-transform:none;color:#484f58}
-.search-input:focus{border-color:#58a6ff}
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
-.search-input.shake{animation:shake .35s ease}
+.search-wrap.shake{animation:shake .35s ease}
 
 /* ── Cards ────────────────────────────────────────────────────── */
 .cards-section{padding:6px 14px;padding-bottom:max(40px,calc(env(safe-area-inset-bottom) + 24px))}
@@ -561,9 +563,12 @@ canvas{display:block}
   <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">▲ RSI</button>
 </div>
 <div class="search-bar">
-  <input class="search-input" id="search-input" type="text" placeholder="🔍 銘柄を検索..."
-    autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
-    onkeydown="if(event.key==='Enter')doSearch()">
+  <div class="search-wrap" id="search-wrap">
+    <span class="search-icon">🔍</span>
+    <input class="search-input" id="search-input" type="text" placeholder="銘柄を検索..."
+      autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false"
+      onkeydown="if(event.key==='Enter')doSearch()">
+  </div>
 </div>
 <button id="totop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="トップへ戻る">▲</button>
 <button id="tobottom" onclick="window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})" aria-label="一番下へ">▼</button>
@@ -839,11 +844,11 @@ function doSearch() {
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     document.getElementById('search-input').blur();
   } else {
-    const inp = document.getElementById('search-input');
-    inp.classList.remove('shake');
-    void inp.offsetWidth; // reflow で再アニメーション
-    inp.classList.add('shake');
-    inp.addEventListener('animationend', () => inp.classList.remove('shake'), { once: true });
+    const wrap = document.getElementById('search-wrap');
+    wrap.classList.remove('shake');
+    void wrap.offsetWidth; // reflow で再アニメーション
+    wrap.classList.add('shake');
+    wrap.addEventListener('animationend', () => wrap.classList.remove('shake'), { once: true });
   }
 }
 
