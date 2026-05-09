@@ -531,8 +531,7 @@ canvas{display:block}
 
   <!-- Update section -->
   <div class="maint-sec">
-    <button class="mbtn mbtn-primary" id="maint-update-btn" onclick="updateTickers()" style="width:100%">🔄 tickers.txt を更新してActions実行</button>
-    <div class="maint-status" id="maint-update-status"></div>
+    <button class="mbtn mbtn-primary" id="maint-update-btn" onclick="updateTickers()" style="width:100%">🔄 更新</button>
   </div>
 </div>
 
@@ -839,7 +838,7 @@ memoEl.addEventListener('input', () => localStorage.setItem('wl_memo', memoEl.te
 const REPO = 'kirevantolix/dashboard';
 const FILE_PATH = 'tickers.txt';
 const BRANCH = 'main';
-let _tickers = [], _sha = '';
+let _tickers = [];
 
 function openMaint() {
   document.getElementById('maint-panel').classList.add('open');
@@ -871,7 +870,7 @@ function clearToken() {
   document.getElementById('maint-token-input').value = '';
   document.getElementById('token-status').textContent = 'トークンを削除しました';
   document.getElementById('maint-ticker-list').innerHTML = '';
-  _tickers = []; _sha = ''; _updateCount();
+  _tickers = []; _updateCount();
 }
 
 async function _loadTickers() {
@@ -885,7 +884,6 @@ async function _loadTickers() {
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
-    _sha = data.sha;
     const content = atob(data.content.replace(/\s/g, ''));
     _tickers = content.split('\n').filter(t => t.trim());
     localStorage.setItem('wl_fcode', _tickers.join(','));
@@ -923,38 +921,30 @@ function addMaintTicker() {
   _renderTickers();
 }
 
-async function _fetchSha() {
-  // ユーザーの編集を保持したままSHAだけ取得
-  const token = localStorage.getItem('wl_token');
-  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}&t=${Date.now()}`, {
-    headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json'}
-  });
-  if (!res.ok) {
-    const e = await res.json().catch(() => ({}));
-    throw new Error(`SHA取得失敗 HTTP ${res.status}: ${e.message || ''}`);
-  }
-  const data = await res.json();
-  _sha = data.sha;
-}
-
 async function updateTickers() {
   const token = localStorage.getItem('wl_token');
-  if (!token) { alert('トークンが未設定です。⚙️画面でwl_tokenを保存してください'); return; }
+  if (!token) { alert('トークンが未設定です'); return; }
   if (_tickers.length === 0) { alert('銘柄が0件です'); return; }
 
   const btn = document.getElementById('maint-update-btn');
-  const status = document.getElementById('maint-update-status');
-  btn.disabled = true; status.textContent = '';
+  const origText = btn.textContent;
+  btn.textContent = '更新中...';
+  btn.disabled = true;
 
   try {
-    // SHA未取得ならユーザー編集を保持したまま取得
-    if (!_sha) {
-      btn.textContent = 'SHA取得中...';
-      await _fetchSha();
+    // 1. SHAを取得
+    const getRes = await fetch(
+      `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}&t=${Date.now()}`,
+      { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' } }
+    );
+    if (!getRes.ok) {
+      const err = await getRes.json().catch(() => ({}));
+      throw new Error(`SHA取得失敗 (${getRes.status}): ${err.message || ''}`);
     }
+    const getData = await getRes.json();
+    const sha = getData.sha;
 
-    // tickers.txt をPUT
-    btn.textContent = '書き込み中...';
+    // 2. tickers.txt をPUT
     const newContent = btoa(_tickers.join('\n') + '\n');
     const putRes = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`, {
       method: 'PUT',
@@ -963,43 +953,30 @@ async function updateTickers() {
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        message: 'Update tickers via dashboard',
-        content: newContent,
-        sha: _sha,
-        branch: BRANCH
-      })
+      body: JSON.stringify({ message: 'Update tickers via dashboard', content: newContent, sha, branch: BRANCH })
     });
     if (!putRes.ok) {
-      const e = await putRes.json().catch(() => ({}));
-      throw new Error(`書き込み失敗 HTTP ${putRes.status}: ${e.message || JSON.stringify(e)}`);
+      const err = await putRes.json().catch(() => ({}));
+      throw new Error(`書き込み失敗 (${putRes.status}): ${err.message || JSON.stringify(err)}`);
     }
-    const putData = await putRes.json();
-    _sha = putData.content.sha;
-    localStorage.setItem('wl_fcode', _tickers.join(','));
 
-    // workflow_dispatch でActions起動
-    btn.textContent = 'Actions起動中...';
-    const dispRes = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/update.yml/dispatches`, {
+    // 3. workflow_dispatch でActions起動
+    await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/update.yml/dispatches`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ref: BRANCH})
+      body: JSON.stringify({ ref: BRANCH })
     });
-    if (dispRes.ok || dispRes.status === 204) {
-      status.textContent = '✅ 完了！tickers.txt更新 & Actions起動しました';
-    } else {
-      const de = await dispRes.json().catch(() => ({}));
-      status.textContent = `✅ tickers.txt更新完了（Actions起動失敗: ${dispRes.status} ${de.message || ''}）`;
-    }
-  } catch(e) {
+
+    alert('更新しました');
+  } catch (e) {
     alert('エラー: ' + e.message);
-    status.textContent = `❌ ${e.message}`;
   }
-  btn.textContent = '🔄 tickers.txt を更新してActions実行';
+
+  btn.textContent = origText;
   btn.disabled = false;
 }
 
