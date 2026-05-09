@@ -8,11 +8,12 @@ import os
 import random
 import base64
 import io
-import yfinance as yf
-import pandas as pd
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
+import yfinance as yf
+import pandas as pd
 from PIL import Image, ImageDraw
 
 # ── Tickers ────────────────────────────────────────────────────────────────────
@@ -30,6 +31,23 @@ if os.path.exists('tickers.txt'):
 else:
     TICKERS = _DEFAULT_TICKERS
     print(f"tickers.txt not found — using default {len(TICKERS)} tickers")
+
+# ── Company Names ──────────────────────────────────────────────────────────────
+
+NAMES = {
+    'NVDA':'NVIDIA',        'AAPL':'Apple',            'MSFT':'Microsoft',
+    'GOOGL':'Alphabet',     'AMZN':'Amazon',           'META':'Meta Platforms',
+    'AVGO':'Broadcom',      'TSLA':'Tesla',            'ORCL':'Oracle',
+    'AMD':'AMD',            'INTC':'Intel',            'NFLX':'Netflix',
+    'PLTR':'Palantir',      'QCOM':'Qualcomm',         'APP':'AppLovin',
+    'MU':'Micron',          'SNDK':'Sandisk',          'NBIS':'Nebius',
+    'ARM':'Arm Holdings',   'TSM':'TSMC',              'LITE':'Lumentum',
+    'CRDO':'Credo Technology','LPTH':'LightPath',      'GS':'Goldman Sachs',
+    'KO':'Coca-Cola',       'NU':'Nu Holdings',        'OSCR':'Oscar Health',
+    'SPY':'S&P 500 ETF',    'QQQ':'Nasdaq ETF',        'IWM':'Russell 2000 ETF',
+    'VT':'Vanguard All-World ETF','SOXL':'Semiconductor Bull 3X',
+    'SLV':'Silver Trust',   'COPX':'Copper Miners ETF','GLD':'Gold Shares',
+}
 
 # ── Touch Icon ─────────────────────────────────────────────────────────────────
 
@@ -110,86 +128,100 @@ def to_list(series, dec=2):
 
 # ── Fetch Data ─────────────────────────────────────────────────────────────────
 
-stocks = []
-for sym in TICKERS:
-    print(f"  {sym:8s}", end=' ', flush=True)
-    try:
-        tk = yf.Ticker(sym)
-        hist = tk.history(period='6mo')
-        if len(hist) < 30:
-            print("skip (insufficient data)")
-            continue
+def fetch_ticker(sym):
+    tk = yf.Ticker(sym)
+    hist = tk.history(period='6mo')
+    if len(hist) < 30:
+        return sym, None, 'skip'
 
-        close = hist['Close']
-        vol = hist['Volume']
+    close = hist['Close']
+    vol   = hist['Volume']
 
-        cur = float(close.iloc[-1])
-        prev = float(close.iloc[-2])
-        pct = (cur - prev) / prev * 100
+    cur    = float(close.iloc[-1])
+    prev   = float(close.iloc[-2])
+    pct    = (cur - prev) / prev * 100
+    cvol   = int(vol.iloc[-1])
+    avgvol = float(vol.tail(11).iloc[:-1].mean())
+    vratio = cvol / avgvol if avgvol else 1.0
 
-        cvol = int(vol.iloc[-1])
-        avgvol = float(vol.tail(11).iloc[:-1].mean())
-        vratio = cvol / avgvol if avgvol else 1.0
+    rsi_s           = calc_rsi(close)
+    rsi             = float(rsi_s.iloc[-1]) if pd.notna(rsi_s.iloc[-1]) else 50.0
+    macd_s, sig_s, _ = calc_macd(close)
+    ma25            = close.rolling(25).mean()
+    ma75            = close.rolling(75).mean()
+    _, _, recent_gc, recent_dc = detect_crosses(ma25, ma75, 5)
+    ma25_last = float(ma25.iloc[-1]) if pd.notna(ma25.iloc[-1]) else None
+    ma75_last = float(ma75.iloc[-1]) if pd.notna(ma75.iloc[-1]) else None
+    ma_above  = bool(ma25_last and ma75_last and ma25_last > ma75_last)
+    status    = overall_status(rsi, ma25_last, ma75_last, pct)
 
-        rsi_s = calc_rsi(close)
-        rsi = float(rsi_s.iloc[-1]) if pd.notna(rsi_s.iloc[-1]) else 50.0
-
-        macd_s, sig_s, _ = calc_macd(close)
-        ma25 = close.rolling(25).mean()
-        ma75 = close.rolling(75).mean()
-
-        gc_idx, dc_idx, recent_gc, recent_dc = detect_crosses(ma25, ma75, 5)
-
-        ma25_last = float(ma25.iloc[-1]) if pd.notna(ma25.iloc[-1]) else None
-        ma75_last = float(ma75.iloc[-1]) if pd.notna(ma75.iloc[-1]) else None
-        ma_above = bool(ma25_last and ma75_last and ma25_last > ma75_last)
-
-        status = overall_status(rsi, ma25_last, ma75_last, pct)
-
+    # 会社名・52週高値（辞書になければ API）
+    name = NAMES.get(sym)
+    w52h = None
+    if not name:
         try:
             info = tk.info
             name = info.get('shortName') or sym
-            w52h = info.get('fiftyTwoWeekHigh', None)
+            w52h = info.get('fiftyTwoWeekHigh')
             w52h = round(float(w52h), 2) if w52h else None
         except Exception:
             name = sym
-            w52h = None
-        w52h_pct = round((cur - w52h) / w52h * 100, 1) if w52h else None
+    else:
+        try:
+            info = tk.info
+            w52h = info.get('fiftyTwoWeekHigh')
+            w52h = round(float(w52h), 2) if w52h else None
+        except Exception:
+            pass
 
-        N = 60
-        c60 = close.tail(N)
-        dates = c60.index.strftime('%m/%d').tolist()
+    w52h_pct = round((cur - w52h) / w52h * 100, 1) if w52h else None
 
-        stocks.append({
-            'ticker':   sym,
-            'name':     name,
-            'price':    round(cur, 2),
-            'pct':      round(pct, 2),
-            'volume':   cvol,
-            'avgvol':   int(avgvol),
-            'vratio':   round(vratio, 2),
-            'rsi':      round(rsi, 1),
-            'macd':     round(float(macd_s.iloc[-1]), 4),
-            'signal':   round(float(sig_s.iloc[-1]), 4),
-            'ma25':     round(ma25_last, 2) if ma25_last else None,
-            'ma75':     round(ma75_last, 2) if ma75_last else None,
-            'ma_above': ma_above,
-            'w52h':     w52h,
-            'w52h_pct': w52h_pct,
-            'gc':       recent_gc,
-            'dc':       recent_dc,
-            'status':   status,
-            'news':     [],
-            'dates':    dates,
-            'prices':   to_list(c60, 2),
-            'ma25d':    to_list(ma25.tail(N), 2),
-            'ma75d':    to_list(ma75.tail(N), 2),
-            'macd_d':   to_list(macd_s.tail(N), 4),
-            'sig_d':    to_list(sig_s.tail(N), 4),
-        })
-        print("ok")
-    except Exception as e:
-        print(f"ERROR: {e}")
+    N    = 60
+    c60  = close.tail(N)
+    dates = c60.index.strftime('%m/%d').tolist()
+
+    return sym, {
+        'ticker':   sym,
+        'name':     name,
+        'price':    round(cur, 2),
+        'pct':      round(pct, 2),
+        'volume':   cvol,
+        'avgvol':   int(avgvol),
+        'vratio':   round(vratio, 2),
+        'rsi':      round(rsi, 1),
+        'macd':     round(float(macd_s.iloc[-1]), 4),
+        'signal':   round(float(sig_s.iloc[-1]), 4),
+        'ma25':     round(ma25_last, 2) if ma25_last else None,
+        'ma75':     round(ma75_last, 2) if ma75_last else None,
+        'ma_above': ma_above,
+        'w52h':     w52h,
+        'w52h_pct': w52h_pct,
+        'gc':       recent_gc,
+        'dc':       recent_dc,
+        'status':   status,
+        'news':     [],
+        'dates':    dates,
+        'prices':   to_list(c60, 2),
+        'ma25d':    to_list(ma25.tail(N), 2),
+        'ma75d':    to_list(ma75.tail(N), 2),
+        'macd_d':   to_list(macd_s.tail(N), 4),
+        'sig_d':    to_list(sig_s.tail(N), 4),
+    }, 'ok'
+
+results = {}
+with ThreadPoolExecutor(max_workers=8) as ex:
+    futures = {ex.submit(fetch_ticker, sym): sym for sym in TICKERS}
+    for fut in as_completed(futures):
+        sym = futures[fut]
+        try:
+            s, data, status = fut.result()
+            results[s] = (data, status)
+            print(f"  {s:8s} {status}")
+        except Exception as e:
+            results[sym] = (None, f'ERROR: {e}')
+            print(f"  {sym:8s} ERROR: {e}")
+
+stocks = [results[sym][0] for sym in TICKERS if results.get(sym, (None,))[0] is not None]
 
 # セクター順でソート（デフォルト表示順）
 SECTOR_ORDER = [
