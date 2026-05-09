@@ -262,6 +262,13 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .quote-mark{font-size:16px;color:#30363d;line-height:1;flex-shrink:0}
 .quote-text{font-size:11px;color:#8b949e;font-style:italic;letter-spacing:.3px}
 
+/* ── Memo ─────────────────────────────────────────────────────── */
+.memo-section{padding:4px 14px 6px}
+.memo-label{font-size:10px;color:#8b949e;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
+.memo-box{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:7px 10px;color:#e6edf3;font-size:12px;line-height:1.5;font-family:inherit;min-height:32px;outline:none;transition:border-color .2s;word-break:break-word;white-space:pre-wrap}
+.memo-box:focus{border-color:#58a6ff}
+.memo-box:empty::before{content:'...';color:#484f58;pointer-events:none}
+
 /* ── Heatmap ──────────────────────────────────────────────────── */
 .heatmap-section{padding:10px 14px 6px}
 .heatmap-section h2{font-size:10px;color:#8b949e;margin-bottom:7px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
@@ -389,6 +396,12 @@ canvas{display:block}
   <span class="quote-mark">"</span>
   <span class="quote-text">QUOTE_PLACEHOLDER</span>
   <span class="quote-mark">"</span>
+</div>
+
+<!-- Memo -->
+<div class="memo-section">
+  <div class="memo-label">MEMO</div>
+  <div class="memo-box" id="memo" contenteditable="true" spellcheck="false"></div>
 </div>
 
 <!-- Heatmap -->
@@ -646,6 +659,11 @@ document.getElementById(`sort-${sortMode}`)?.classList.add('active');
 ['sector','up','down'].filter(m=>m!==sortMode).forEach(m=>document.getElementById(`sort-${m}`)?.classList.remove('active'));
 
 renderAll();
+
+// Memo
+const memoEl = document.getElementById('memo');
+memoEl.textContent = localStorage.getItem('wl_memo') || '';
+memoEl.addEventListener('input', () => localStorage.setItem('wl_memo', memoEl.textContent));
 
 // トップへ戻るボタン
 const toTopBtn = document.getElementById('totop');
