@@ -581,10 +581,11 @@ canvas{display:block}
 
   <!-- Filter popup -->
   <div class="sf-popup" id="filter-popup">
-    <div class="sf-item" onclick="toggleFilter('gc')">      <span class="sf-check" id="fk-gc"></span>ゴールデンクロス</div>
-    <div class="sf-item" onclick="toggleFilter('ath')">     <span class="sf-check" id="fk-ath"></span>新高値ブレイク</div>
-    <div class="sf-item" onclick="toggleFilter('rsi-high')"><span class="sf-check" id="fk-rsi-high"></span>RSI 70以上</div>
-    <div class="sf-item" onclick="toggleFilter('rsi-low')"> <span class="sf-check" id="fk-rsi-low"></span>RSI 30以下</div>
+    <div class="sf-item" onclick="setFilter('all')">       <span class="sf-check" id="fk-all"></span>すべて</div>
+    <div class="sf-item" onclick="setFilter('gc')">        <span class="sf-check" id="fk-gc"></span>ゴールデンクロス</div>
+    <div class="sf-item" onclick="setFilter('ath')">       <span class="sf-check" id="fk-ath"></span>新高値ブレイク</div>
+    <div class="sf-item" onclick="setFilter('rsi-high')">  <span class="sf-check" id="fk-rsi-high"></span>RSI 70以上</div>
+    <div class="sf-item" onclick="setFilter('rsi-low')">   <span class="sf-check" id="fk-rsi-low"></span>RSI 30以下</div>
   </div>
 </div>
 <div class="sf-backdrop" id="sf-backdrop" onclick="closeAllPopups()"></div>
@@ -623,12 +624,14 @@ let sortMode = LS.get('wl_sort', 'sector');
 if (!SORT_LABELS[sortMode]) sortMode = 'sector';
 
 const FILTER_DEFS = {
-  gc:       { label:'ゴールデンクロス', fn: s => !!s.gc },
-  ath:      { label:'新高値ブレイク',   fn: s => s.w52h_pct != null && s.w52h_pct >= 0 },
-  'rsi-high':{ label:'RSI 70以上',     fn: s => s.rsi >= 70 },
-  'rsi-low': { label:'RSI 30以下',     fn: s => s.rsi <= 30 },
+  all:       { label:'すべて',           fn: () => true },
+  gc:        { label:'ゴールデンクロス', fn: s => !!s.gc },
+  ath:       { label:'新高値ブレイク',   fn: s => s.w52h_pct != null && s.w52h_pct >= 0 },
+  'rsi-high':{ label:'RSI 70以上',      fn: s => s.rsi >= 70 },
+  'rsi-low': { label:'RSI 30以下',      fn: s => s.rsi <= 30 },
 };
-let activeFilters = new Set(LS.get('wl_filters', []));
+let filterMode = LS.get('wl_filter', 'all');
+if (!FILTER_DEFS[filterMode]) filterMode = 'all';
 
 // ── Heatmap ───────────────────────────────────────────────────────────────────
 function pctToColor(pct) {
@@ -776,9 +779,8 @@ let ioRef = null;
 
 function getVisibleStocks() {
   // フィルタ適用
-  let list = activeFilters.size > 0
-    ? STOCKS.filter(s => [...activeFilters].every(k => FILTER_DEFS[k]?.fn(s)))
-    : [...STOCKS];
+  const filterFn = FILTER_DEFS[filterMode]?.fn ?? (() => true);
+  let list = STOCKS.filter(filterFn);
   // ソート適用
   if (sortMode === 'up')       list.sort((a,b) => b.pct - a.pct);
   else if (sortMode === 'down')     list.sort((a,b) => a.pct - b.pct);
@@ -912,20 +914,20 @@ function _updateSortUI() {
 }
 
 // ── Filter ────────────────────────────────────────────────────────────────────
-function toggleFilter(key) {
-  activeFilters.has(key) ? activeFilters.delete(key) : activeFilters.add(key);
-  LS.set('wl_filters', [...activeFilters]);
+function setFilter(mode) {
+  filterMode = mode;
+  LS.set('wl_filter', mode);
+  closeAllPopups();
   _updateFilterUI();
   renderAll();
 }
 function _updateFilterUI() {
-  const count = activeFilters.size;
   const btn = document.getElementById('filter-btn');
-  btn.textContent = count > 0 ? `⬡ 絞り込み (${count})` : '⬡ 絞り込み';
-  btn.classList.toggle('active', count > 0);
+  btn.textContent = filterMode === 'all' ? '⬡ 絞り込み' : `⬡ ${FILTER_DEFS[filterMode].label}`;
+  btn.classList.toggle('active', filterMode !== 'all');
   Object.keys(FILTER_DEFS).forEach(k => {
     const el = document.getElementById(`fk-${k}`);
-    if (el) el.textContent = activeFilters.has(k) ? '✓' : '';
+    if (el) el.textContent = k === filterMode ? '✓' : '';
   });
 }
 
