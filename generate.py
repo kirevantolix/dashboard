@@ -946,7 +946,9 @@ function doSearch() {
   const card = document.getElementById(`card-${raw}`);
   if (card) {
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    document.getElementById('search-input').blur();
+    const inp = document.getElementById('search-input');
+    inp.value = '';
+    inp.blur();
   } else {
     const wrap = document.getElementById('search-wrap');
     wrap.classList.remove('shake');
