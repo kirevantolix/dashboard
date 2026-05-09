@@ -521,7 +521,7 @@ canvas{display:block}
 <button id="search-btn" onclick="openSearch()" aria-label="検索">🔍</button>
 <div id="search-overlay" onclick="closeSearch(event)">
   <div id="search-box">
-    <input id="search-input" type="text" placeholder="ティッカー例: NVDA" autocomplete="off" autocorrect="off" spellcheck="false" onkeydown="if(event.key==='Enter')doSearch()" oninput="this.value=this.value.toUpperCase()">
+    <input id="search-input" type="text" placeholder="ティッカー例: NVDA" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase" onkeydown="if(event.key==='Enter')doSearch()">
     <button id="search-go" onclick="doSearch()">検索</button>
   </div>
 </div>
