@@ -155,24 +155,21 @@ def fetch_ticker(sym):
     ma_above  = bool(ma25_last and ma75_last and ma25_last > ma75_last)
     status    = overall_status(rsi, ma25_last, ma75_last, pct)
 
-    # 会社名・52週高値（辞書になければ API）
+    # 会社名・52週高値・予想PER（辞書になければ API）
     name = NAMES.get(sym)
     w52h = None
-    if not name:
-        try:
-            info = tk.info
+    fwd_pe = None
+    try:
+        info   = tk.info
+        if not name:
             name = info.get('shortName') or sym
-            w52h = info.get('fiftyTwoWeekHigh')
-            w52h = round(float(w52h), 2) if w52h else None
-        except Exception:
+        raw52h = info.get('fiftyTwoWeekHigh')
+        w52h   = round(float(raw52h), 2) if raw52h else None
+        raw_pe = info.get('forwardPE')
+        fwd_pe = round(float(raw_pe), 1) if raw_pe else None
+    except Exception:
+        if not name:
             name = sym
-    else:
-        try:
-            info = tk.info
-            w52h = info.get('fiftyTwoWeekHigh')
-            w52h = round(float(w52h), 2) if w52h else None
-        except Exception:
-            pass
 
     w52h_pct = round((cur - w52h) / w52h * 100, 1) if w52h else None
 
@@ -196,6 +193,7 @@ def fetch_ticker(sym):
         'ma_above': ma_above,
         'w52h':     w52h,
         'w52h_pct': w52h_pct,
+        'fwd_pe':   fwd_pe,
         'gc':       recent_gc,
         'dc':       recent_dc,
         'status':   status,
@@ -586,6 +584,7 @@ function buildCard(s) {
       ${s.ma25 ? `<div class="stat"><span class="stat-val">$${s.ma25}</span><span class="stat-lbl">MA25</span></div>` : ''}
       ${s.ma75 ? `<div class="stat"><span class="stat-val">$${s.ma75}</span><span class="stat-lbl">MA75</span></div>` : ''}
       ${w52Label ? `<div class="stat"><span class="stat-val" style="color:${w52Color}">${w52Label}</span><span class="stat-lbl">52W High</span></div>` : ''}
+      <div class="stat"><span class="stat-val">${s.fwd_pe != null ? s.fwd_pe : 'N/A'}</span><span class="stat-lbl">Fwd PE</span></div>
     </div>
     <div class="divider"></div>
     ${hasCharts ? `
