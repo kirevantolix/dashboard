@@ -360,7 +360,7 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .sf-btn.active{border-color:#58a6ff;color:#58a6ff}
 .sf-btn:active{opacity:.7}
 /* ── Popup ────────────────────────────────────────────────────── */
-.sf-popup{display:none;position:absolute;top:calc(100% - 2px);left:14px;right:14px;background:rgba(40,40,40,.97);border-radius:14px;z-index:400;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
+.sf-popup{display:none;position:absolute;left:14px;right:14px;background:rgba(40,40,40,.97);border-radius:14px;z-index:400;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
 .sf-popup.open{display:block}
 .sf-item{display:flex;align-items:center;padding:13px 16px;font-size:15px;color:#e6edf3;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07);gap:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .sf-item:last-child{border-bottom:none}
@@ -799,6 +799,10 @@ function renderAll() {
 
   const grid = document.getElementById('cards');
   grid.innerHTML = '';
+  if (visible.length === 0) {
+    grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:56px 0 32px;color:#484f58;font-size:14px">該当する銘柄がありません</div>';
+    return;
+  }
   visible.forEach(s => {
     const card = document.createElement('div');
     card.className = 'card';
@@ -864,12 +868,26 @@ function togglePopup(id) {
   const isOpen = popup.classList.contains('open');
   closeAllPopups();
   if (!isOpen) {
+    // いったんリセットして下方向に仮表示
+    popup.style.top = 'calc(100% - 2px)';
+    popup.style.bottom = '';
     popup.classList.add('open');
     document.getElementById('sf-backdrop').classList.add('open');
+    // 画面下からはみ出す場合は上方向に切り替え
+    const rect = popup.getBoundingClientRect();
+    const margin = 12;
+    if (rect.bottom > window.innerHeight - margin) {
+      popup.style.top = '';
+      popup.style.bottom = 'calc(100% - 2px)';
+    }
   }
 }
 function closeAllPopups() {
-  document.querySelectorAll('.sf-popup').forEach(p => p.classList.remove('open'));
+  document.querySelectorAll('.sf-popup').forEach(p => {
+    p.classList.remove('open');
+    p.style.top = '';
+    p.style.bottom = '';
+  });
   document.getElementById('sf-backdrop').classList.remove('open');
 }
 
