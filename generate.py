@@ -147,15 +147,12 @@ for sym in TICKERS:
         status = overall_status(rsi, ma25_last, ma75_last, pct)
 
         try:
-            fi = tk.fast_info
-            name = getattr(fi, 'long_name', None) or sym
-        except Exception:
-            name = sym
-
-        try:
-            w52h = tk.info.get('fiftyTwoWeekHigh', None)
+            info = tk.info
+            name = info.get('shortName') or sym
+            w52h = info.get('fiftyTwoWeekHigh', None)
             w52h = round(float(w52h), 2) if w52h else None
         except Exception:
+            name = sym
             w52h = None
         w52h_pct = round((cur - w52h) / w52h * 100, 1) if w52h else None
 
@@ -524,14 +521,11 @@ function buildCard(s) {
   const volFire  = s.vratio >= 1.5 ? ' <span class="vol-fire">🔥</span>' : '';
   const volColor = s.vratio >= 1.5 ? '#f0883e' : '#8b949e';
   const volBold  = s.vratio >= 1.5 ? 700 : 400;
-  const macdDiff  = ((s.macd||0)-(s.signal||0)).toFixed(4);
-  const macdColor = (s.macd||0) > (s.signal||0) ? '#3fb950' : '#f85149';
   const w52Label  = s.w52h_pct != null
-    ? (s.w52h_pct >= 0 ? '🏆 52W High' : `${s.w52h_pct}% from 52W High`)
+    ? (s.w52h_pct >= 0 ? '🏆' : `${s.w52h_pct}%`)
     : null;
   const w52Color  = s.w52h_pct == null ? '#8b949e'
-    : s.w52h_pct >= 0 ? '#d4a017'
-    : s.w52h_pct >= -5 ? '#d4a017'
+    : s.w52h_pct >= -5  ? '#d4a017'
     : s.w52h_pct >= -10 ? '#3fb950'
     : '#8b949e';
   const hasCharts = s.prices && s.prices.length > 0;
@@ -559,7 +553,6 @@ function buildCard(s) {
     <div class="summary-stats">
       ${s.ma25 ? `<div class="stat"><span class="stat-val">$${s.ma25}</span><span class="stat-lbl">MA25</span></div>` : ''}
       ${s.ma75 ? `<div class="stat"><span class="stat-val">$${s.ma75}</span><span class="stat-lbl">MA75</span></div>` : ''}
-      <div class="stat"><span class="stat-val" style="color:${macdColor}">${macdDiff}</span><span class="stat-lbl">MACD Diff</span></div>
       ${w52Label ? `<div class="stat"><span class="stat-val" style="color:${w52Color}">${w52Label}</span><span class="stat-lbl">52W High</span></div>` : ''}
     </div>
     <div class="divider"></div>
