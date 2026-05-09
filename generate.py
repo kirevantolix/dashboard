@@ -365,7 +365,7 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .search-wrap{display:flex;align-items:center;gap:8px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:7px 10px;transition:border-color .2s}
 .search-wrap:focus-within{border-color:#58a6ff}
 .search-icon{color:#484f58;font-size:13px;flex-shrink:0;line-height:1;pointer-events:none}
-.search-input{flex:1;background:none;border:none;outline:none;color:#e6edf3;font-size:12px;font-family:inherit;padding:0;min-width:0;text-transform:uppercase}
+.search-input{flex:1;background:none;border:none;outline:none;color:#e6edf3;font-size:16px;font-family:inherit;padding:0;min-width:0;text-transform:uppercase}
 .search-input::placeholder{text-transform:none;color:#484f58}
 @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
 .search-wrap.shake{animation:shake .35s ease}
