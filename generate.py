@@ -353,12 +353,21 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .idx-heatmap .hm-price{font-size:9px;font-weight:400;margin-top:1px;opacity:.85}
 .idx-divider{height:1px;background:#30363d;margin:5px 0}
 
-/* ── Sort Bar ─────────────────────────────────────────────────── */
-.sort-bar{display:flex;align-items:center;gap:6px;padding:8px 14px 4px;flex-wrap:wrap}
-.sort-label{font-size:10px;color:#8b949e}
-.sort-btn{padding:7px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #30363d;background:#1c2128;color:#8b949e;transition:all .12s;touch-action:manipulation}
-.sort-btn.active{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff}
-.sort-btn:active{opacity:.7}
+/* ── Sort / Filter Bar ────────────────────────────────────────── */
+.sf-container{position:relative}
+.sf-bar{display:flex;gap:8px;padding:8px 14px 4px}
+.sf-btn{flex:1;padding:9px 0;border-radius:8px;font-size:13px;font-weight:600;border:1px solid #30363d;background:#1c2128;color:#e6edf3;text-align:center;transition:border-color .15s,color .15s;touch-action:manipulation}
+.sf-btn.active{border-color:#58a6ff;color:#58a6ff}
+.sf-btn:active{opacity:.7}
+/* ── Popup ────────────────────────────────────────────────────── */
+.sf-popup{display:none;position:absolute;top:calc(100% - 2px);left:14px;right:14px;background:rgba(40,40,40,.97);border-radius:14px;z-index:400;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
+.sf-popup.open{display:block}
+.sf-item{display:flex;align-items:center;padding:13px 16px;font-size:15px;color:#e6edf3;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07);gap:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.sf-item:last-child{border-bottom:none}
+.sf-item:active{background:rgba(255,255,255,.09)}
+.sf-check{width:24px;flex-shrink:0;color:#58a6ff;font-size:15px;font-weight:700}
+.sf-backdrop{display:none;position:fixed;inset:0;z-index:399}
+.sf-backdrop.open{display:block}
 
 /* ── Search Bar ───────────────────────────────────────────────── */
 .search-bar{padding:4px 14px 6px}
@@ -437,7 +446,8 @@ canvas{display:block}
   .hm-cell{min-height:37px;font-size:10px;padding:3px 4px;border-radius:5px}
   .heatmap:not(.idx-heatmap) .hm-cell{width:calc((100% - 18px) / 7);flex:none}
   .hm-cell .hm-pct{font-size:8px}
-  .sort-bar{padding:6px 10px 3px;gap:5px}
+  .sf-bar{padding:6px 10px 3px;gap:6px}
+  .sf-btn{font-size:12px;padding:8px 0}
   .search-bar{padding:3px 10px 5px}
   .cards-section{padding:5px 10px;padding-bottom:max(36px,calc(env(safe-area-inset-bottom) + 20px))}
   .cards-grid{grid-template-columns:1fr;gap:10px}
@@ -451,7 +461,6 @@ canvas{display:block}
   .divider{margin:0 10px}
   .summary-stats,.vol-row,.price-row{padding-left:10px;padding-right:10px}
   .macd-wrap{padding:2px 10px 7px}
-  .sort-btn{padding:8px 14px}
 }
 @media(max-width:375px){
   .hm-cell{font-size:9px}
@@ -554,14 +563,32 @@ canvas{display:block}
   <div class="heatmap" id="heatmap"></div>
 </div>
 
-<!-- Sort Bar + Search + Cards -->
-<div class="sort-bar">
-  <span class="sort-label">並び替え:</span>
-  <button class="sort-btn active" id="sort-sector" onclick="setSort('sector')">☰ セクター順</button>
-  <button class="sort-btn" id="sort-up"     onclick="setSort('up')">▲ 値上がり</button>
-  <button class="sort-btn" id="sort-down"   onclick="setSort('down')">▼ 値下がり</button>
-  <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">▲ RSI</button>
+<!-- Sort / Filter / Search -->
+<div class="sf-container">
+  <div class="sf-bar">
+    <button class="sf-btn" id="sort-btn" onclick="togglePopup('sort-popup')">☰ 並び替え</button>
+    <button class="sf-btn" id="filter-btn" onclick="togglePopup('filter-popup')">⬡ 絞り込み</button>
+  </div>
+
+  <!-- Sort popup -->
+  <div class="sf-popup" id="sort-popup">
+    <div class="sf-item" onclick="setSort('sector')">  <span class="sf-check" id="ck-sector"></span>セクター順</div>
+    <div class="sf-item" onclick="setSort('up')">      <span class="sf-check" id="ck-up"></span>値上がり順</div>
+    <div class="sf-item" onclick="setSort('down')">    <span class="sf-check" id="ck-down"></span>値下がり順</div>
+    <div class="sf-item" onclick="setSort('rsi-desc')"><span class="sf-check" id="ck-rsi-desc"></span>RSI 降順</div>
+    <div class="sf-item" onclick="setSort('rsi-asc')"> <span class="sf-check" id="ck-rsi-asc"></span>RSI 昇順</div>
+  </div>
+
+  <!-- Filter popup -->
+  <div class="sf-popup" id="filter-popup">
+    <div class="sf-item" onclick="toggleFilter('gc')">      <span class="sf-check" id="fk-gc"></span>ゴールデンクロス</div>
+    <div class="sf-item" onclick="toggleFilter('ath')">     <span class="sf-check" id="fk-ath"></span>新高値ブレイク</div>
+    <div class="sf-item" onclick="toggleFilter('rsi-high')"><span class="sf-check" id="fk-rsi-high"></span>RSI 70以上</div>
+    <div class="sf-item" onclick="toggleFilter('rsi-low')"> <span class="sf-check" id="fk-rsi-low"></span>RSI 30以下</div>
+  </div>
 </div>
+<div class="sf-backdrop" id="sf-backdrop" onclick="closeAllPopups()"></div>
+
 <div class="search-bar">
   <div class="search-wrap" id="search-wrap">
     <span class="search-icon">🔍</span>
@@ -590,8 +617,18 @@ const LS = {
   get: (k, def) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? def; } catch { return def; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
+// ── Sort & Filter state ───────────────────────────────────────────────────────
+const SORT_LABELS = {sector:'セクター順', up:'値上がり順', down:'値下がり順', 'rsi-desc':'RSI 降順', 'rsi-asc':'RSI 昇順'};
 let sortMode = LS.get('wl_sort', 'sector');
-if (!['sector','up','down','rsi'].includes(sortMode)) sortMode = 'sector';
+if (!SORT_LABELS[sortMode]) sortMode = 'sector';
+
+const FILTER_DEFS = {
+  gc:       { label:'ゴールデンクロス', fn: s => !!s.gc },
+  ath:      { label:'新高値ブレイク',   fn: s => s.w52h_pct != null && s.w52h_pct >= 0 },
+  'rsi-high':{ label:'RSI 70以上',     fn: s => s.rsi >= 70 },
+  'rsi-low': { label:'RSI 30以下',     fn: s => s.rsi <= 30 },
+};
+let activeFilters = new Set(LS.get('wl_filters', []));
 
 // ── Heatmap ───────────────────────────────────────────────────────────────────
 function pctToColor(pct) {
@@ -738,11 +775,17 @@ function buildCard(s) {
 let ioRef = null;
 
 function getVisibleStocks() {
-  const all = [...STOCKS];
-  if (sortMode === 'up')   return [...all].sort((a,b) => b.pct - a.pct);
-  if (sortMode === 'down') return [...all].sort((a,b) => a.pct - b.pct);
-  if (sortMode === 'rsi')  return [...all].sort((a,b) => (b.rsi||0) - (a.rsi||0));
-  return all; // sector order = STOCKS array order
+  // フィルタ適用
+  let list = activeFilters.size > 0
+    ? STOCKS.filter(s => [...activeFilters].every(k => FILTER_DEFS[k]?.fn(s)))
+    : [...STOCKS];
+  // ソート適用
+  if (sortMode === 'up')       list.sort((a,b) => b.pct - a.pct);
+  else if (sortMode === 'down')     list.sort((a,b) => a.pct - b.pct);
+  else if (sortMode === 'rsi-desc') list.sort((a,b) => (b.rsi||0) - (a.rsi||0));
+  else if (sortMode === 'rsi-asc')  list.sort((a,b) => (a.rsi||0) - (b.rsi||0));
+  // sector: STOCKS配列順のまま
+  return list;
 }
 
 function renderAll() {
@@ -815,24 +858,65 @@ function renderMacdChart(s) {
   cv.addEventListener('touchend', () => { mc.tooltip.setActiveElements([], {}); mc.update('none'); }, {passive:true});
 }
 
+// ── Popup control ─────────────────────────────────────────────────────────────
+function togglePopup(id) {
+  const popup = document.getElementById(id);
+  const isOpen = popup.classList.contains('open');
+  closeAllPopups();
+  if (!isOpen) {
+    popup.classList.add('open');
+    document.getElementById('sf-backdrop').classList.add('open');
+  }
+}
+function closeAllPopups() {
+  document.querySelectorAll('.sf-popup').forEach(p => p.classList.remove('open'));
+  document.getElementById('sf-backdrop').classList.remove('open');
+}
+
 // ── Sort ──────────────────────────────────────────────────────────────────────
 function setSort(mode) {
   sortMode = mode;
   LS.set('wl_sort', mode);
-  ['sector','up','down','rsi'].forEach(m => {
-    document.getElementById(`sort-${m}`).classList.toggle('active', m === mode);
-  });
+  closeAllPopups();
+  _updateSortUI();
   renderAll();
+}
+function _updateSortUI() {
+  // ボタンラベル
+  const btn = document.getElementById('sort-btn');
+  btn.textContent = sortMode === 'sector' ? '☰ 並び替え' : `☰ ${SORT_LABELS[sortMode]}`;
+  btn.classList.toggle('active', sortMode !== 'sector');
+  // チェックマーク
+  Object.keys(SORT_LABELS).forEach(m => {
+    const el = document.getElementById(`ck-${m}`);
+    if (el) el.textContent = m === sortMode ? '✓' : '';
+  });
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+function toggleFilter(key) {
+  activeFilters.has(key) ? activeFilters.delete(key) : activeFilters.add(key);
+  LS.set('wl_filters', [...activeFilters]);
+  _updateFilterUI();
+  renderAll();
+}
+function _updateFilterUI() {
+  const count = activeFilters.size;
+  const btn = document.getElementById('filter-btn');
+  btn.textContent = count > 0 ? `⬡ 絞り込み (${count})` : '⬡ 絞り込み';
+  btn.classList.toggle('active', count > 0);
+  Object.keys(FILTER_DEFS).forEach(k => {
+    const el = document.getElementById(`fk-${k}`);
+    if (el) el.textContent = activeFilters.has(k) ? '✓' : '';
+  });
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-// ページロード時にハッシュを消してトップに戻る
 history.replaceState(null, '', window.location.pathname);
 window.scrollTo(0, 0);
 
-document.getElementById(`sort-${sortMode}`)?.classList.add('active');
-['sector','up','down'].filter(m=>m!==sortMode).forEach(m=>document.getElementById(`sort-${m}`)?.classList.remove('active'));
-
+_updateSortUI();
+_updateFilterUI();
 renderAll();
 
 // ── Search ────────────────────────────────────────────────────────────────────
