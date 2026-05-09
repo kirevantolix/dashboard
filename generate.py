@@ -929,30 +929,47 @@ async function updateTickers() {
   if (_tickers.length === 0) { alert('銘柄が0件です'); return; }
   const btn = document.getElementById('maint-update-btn');
   const status = document.getElementById('maint-update-status');
-  btn.disabled = true; btn.textContent = '更新中...'; status.textContent = '';
+  btn.disabled = true; status.textContent = '';
+
   try {
+    // SHA が未取得なら先に取得
+    if (!_sha) {
+      btn.textContent = 'SHA取得中...';
+      await _loadTickers();
+      if (!_sha) throw new Error('ファイルSHAの取得に失敗しました。トークンを確認してください');
+    }
+
+    btn.textContent = '書き込み中...';
     const content = btoa(_tickers.join('\n') + '\n');
     const putRes = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`, {
       method: 'PUT',
       headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'},
       body: JSON.stringify({message: 'Update tickers via dashboard', content, sha: _sha, branch: BRANCH})
     });
-    if (!putRes.ok) { const e = await putRes.json(); throw new Error(e.message || `HTTP ${putRes.status}`); }
+    if (!putRes.ok) {
+      const e = await putRes.json();
+      throw new Error(`PUT失敗 ${putRes.status}: ${e.message || JSON.stringify(e)}`);
+    }
     const putData = await putRes.json();
     _sha = putData.content.sha;
     localStorage.setItem('wl_fcode', _tickers.join(','));
 
-    await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/update.yml/dispatches`, {
+    btn.textContent = 'Actions起動中...';
+    const dispRes = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/update.yml/dispatches`, {
       method: 'POST',
       headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'},
       body: JSON.stringify({ref: BRANCH})
     });
-    status.textContent = '✅ 完了！Actionsを起動しました';
-    btn.textContent = '🔄 tickers.txt を更新してActions実行';
+    // 204 No Content = 成功
+    if (!dispRes.ok && dispRes.status !== 204) {
+      status.textContent = '✅ tickers.txt更新完了（Actions起動は手動で）';
+    } else {
+      status.textContent = '✅ 完了！Actionsを起動しました';
+    }
   } catch(e) {
-    status.textContent = `❌ エラー: ${e.message}`;
-    btn.textContent = '🔄 tickers.txt を更新してActions実行';
+    status.textContent = `❌ ${e.message}`;
   }
+  btn.textContent = '🔄 tickers.txt を更新してActions実行';
   btn.disabled = false;
 }
 
