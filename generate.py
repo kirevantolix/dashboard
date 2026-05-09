@@ -152,6 +152,13 @@ for sym in TICKERS:
         except Exception:
             name = sym
 
+        try:
+            w52h = tk.info.get('fiftyTwoWeekHigh', None)
+            w52h = round(float(w52h), 2) if w52h else None
+        except Exception:
+            w52h = None
+        w52h_pct = round((cur - w52h) / w52h * 100, 1) if w52h else None
+
         N = 60
         c60 = close.tail(N)
         dates = c60.index.strftime('%m/%d').tolist()
@@ -170,6 +177,8 @@ for sym in TICKERS:
             'ma25':     round(ma25_last, 2) if ma25_last else None,
             'ma75':     round(ma75_last, 2) if ma75_last else None,
             'ma_above': ma_above,
+            'w52h':     w52h,
+            'w52h_pct': w52h_pct,
             'gc':       recent_gc,
             'dc':       recent_dc,
             'status':   status,
@@ -517,6 +526,14 @@ function buildCard(s) {
   const volBold  = s.vratio >= 1.5 ? 700 : 400;
   const macdDiff  = ((s.macd||0)-(s.signal||0)).toFixed(4);
   const macdColor = (s.macd||0) > (s.signal||0) ? '#3fb950' : '#f85149';
+  const w52Label  = s.w52h_pct != null
+    ? (s.w52h_pct >= 0 ? '🏆 52W High' : `${s.w52h_pct}% from 52W High`)
+    : null;
+  const w52Color  = s.w52h_pct == null ? '#8b949e'
+    : s.w52h_pct >= 0 ? '#d4a017'
+    : s.w52h_pct >= -5 ? '#d4a017'
+    : s.w52h_pct >= -10 ? '#3fb950'
+    : '#8b949e';
   const hasCharts = s.prices && s.prices.length > 0;
 
   return `
@@ -543,6 +560,7 @@ function buildCard(s) {
       ${s.ma25 ? `<div class="stat"><span class="stat-val">$${s.ma25}</span><span class="stat-lbl">MA25</span></div>` : ''}
       ${s.ma75 ? `<div class="stat"><span class="stat-val">$${s.ma75}</span><span class="stat-lbl">MA75</span></div>` : ''}
       <div class="stat"><span class="stat-val" style="color:${macdColor}">${macdDiff}</span><span class="stat-lbl">MACD Diff</span></div>
+      ${w52Label ? `<div class="stat"><span class="stat-val" style="color:${w52Color}">${w52Label}</span><span class="stat-lbl">52W High</span></div>` : ''}
     </div>
     <div class="divider"></div>
     ${hasCharts ? `
