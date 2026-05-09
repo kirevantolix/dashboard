@@ -455,6 +455,29 @@ canvas{display:block}
   .price{font-size:18px}
   .gauge-wrap{width:90px}
 }
+/* ── Maintenance Panel ────────────────────────────────────────── */
+#maint-panel{position:fixed;inset:0;background:#0d1117;z-index:500;transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);overflow-y:auto;-webkit-overflow-scrolling:touch}
+#maint-panel.open{transform:translateX(0)}
+.maint-hdr{display:flex;align-items:center;gap:10px;padding:max(14px,env(safe-area-inset-top)) 14px 14px;border-bottom:1px solid #30363d;position:sticky;top:0;background:#0d1117;z-index:1}
+.maint-back{background:none;border:none;color:#58a6ff;font-size:22px;cursor:pointer;padding:0 4px;line-height:1}
+.maint-title{font-size:16px;font-weight:700;color:#e6edf3;flex:1}
+.maint-sec{padding:16px 14px;border-bottom:1px solid #21262d}
+.maint-sec-lbl{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+.maint-input{width:100%;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:9px 10px;color:#e6edf3;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box}
+.maint-input:focus{border-color:#58a6ff}
+.maint-row{display:flex;gap:8px;margin-top:8px}
+.mbtn{padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;flex-shrink:0}
+.mbtn-primary{background:#238636;color:#fff}
+.mbtn-primary:disabled{opacity:.5;cursor:default}
+.mbtn-secondary{background:#1c2128;color:#e6edf3;border:1px solid #30363d}
+.mbtn-danger{background:none;border:none;color:#f85149;font-size:18px;cursor:pointer;padding:2px 8px;line-height:1}
+.ticker-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #21262d}
+.ticker-row:last-child{border-bottom:none}
+.ticker-row-name{font-size:14px;font-weight:600;color:#e6edf3}
+.maint-status{font-size:12px;color:#8b949e;margin-top:8px;min-height:16px}
+#maint-gear{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px;line-height:1;-webkit-tap-highlight-color:transparent}
+#maint-gear:hover{color:#e6edf3}
+
 /* ── Scroll to top ────────────────────────────────────────────── */
 #totop,#tobottom{position:fixed;right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .25s,background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
 #totop{bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px));opacity:0;pointer-events:none}
@@ -474,6 +497,42 @@ canvas{display:block}
   <div class="header-right">
     <span id="stock-count" style="font-size:10px;color:#8b949e"></span>
     <a class="update-link" href="https://github.com/kirevantolix/dashboard/actions/workflows/update.yml" target="_blank" rel="noopener">🔄 更新</a>
+    <button id="maint-gear" onclick="openMaint()" aria-label="メンテナンス">⚙️</button>
+  </div>
+</div>
+
+<!-- Maintenance Panel -->
+<div id="maint-panel">
+  <div class="maint-hdr">
+    <button class="maint-back" onclick="closeMaint()">‹</button>
+    <span class="maint-title">⚙️ メンテナンス</span>
+  </div>
+
+  <!-- Token section -->
+  <div class="maint-sec" id="maint-token-sec">
+    <div class="maint-sec-lbl">GitHub トークン</div>
+    <input class="maint-input" id="maint-token-input" type="password" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" spellcheck="false">
+    <div class="maint-row">
+      <button class="mbtn mbtn-primary" onclick="saveToken()">保存</button>
+      <button class="mbtn mbtn-secondary" onclick="clearToken()">クリア</button>
+    </div>
+    <div class="maint-status" id="token-status"></div>
+  </div>
+
+  <!-- Ticker list section -->
+  <div class="maint-sec" id="maint-ticker-sec">
+    <div class="maint-sec-lbl">銘柄一覧 <span id="maint-ticker-count" style="color:#484f58"></span></div>
+    <div id="maint-ticker-list"></div>
+    <div class="maint-row" style="margin-top:14px">
+      <input class="maint-input" id="maint-add-input" type="text" placeholder="ティッカー追加（例：NVDA）" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase" onkeydown="if(event.key==='Enter')addMaintTicker()">
+      <button class="mbtn mbtn-secondary" onclick="addMaintTicker()">追加</button>
+    </div>
+  </div>
+
+  <!-- Update section -->
+  <div class="maint-sec">
+    <button class="mbtn mbtn-primary" id="maint-update-btn" onclick="updateTickers()" style="width:100%">🔄 tickers.txt を更新してActions実行</button>
+    <div class="maint-status" id="maint-update-status"></div>
   </div>
 </div>
 
@@ -775,6 +834,127 @@ renderAll();
 const memoEl = document.getElementById('memo');
 memoEl.textContent = localStorage.getItem('wl_memo') || '';
 memoEl.addEventListener('input', () => localStorage.setItem('wl_memo', memoEl.textContent));
+
+// ── Maintenance ──────────────────────────────────────────────────────────────
+const REPO = 'kirevantolix/dashboard';
+const FILE_PATH = 'tickers.txt';
+const BRANCH = 'main';
+let _tickers = [], _sha = '';
+
+function openMaint() {
+  document.getElementById('maint-panel').classList.add('open');
+  _initMaint();
+}
+function closeMaint() {
+  document.getElementById('maint-panel').classList.remove('open');
+}
+
+function _initMaint() {
+  const token = localStorage.getItem('wl_token') || '';
+  const tokenInput = document.getElementById('maint-token-input');
+  tokenInput.value = token ? '●'.repeat(16) : '';
+  document.getElementById('token-status').textContent = token ? '✅ トークン保存済み' : '';
+  if (token) _loadTickers();
+  else { document.getElementById('maint-ticker-list').innerHTML = ''; _updateCount(); }
+}
+
+function saveToken() {
+  const v = document.getElementById('maint-token-input').value.trim();
+  if (!v || v.startsWith('●')) return;
+  localStorage.setItem('wl_token', v);
+  document.getElementById('token-status').textContent = '✅ 保存しました';
+  document.getElementById('maint-token-input').value = '●'.repeat(16);
+  _loadTickers();
+}
+function clearToken() {
+  localStorage.removeItem('wl_token');
+  document.getElementById('maint-token-input').value = '';
+  document.getElementById('token-status').textContent = 'トークンを削除しました';
+  document.getElementById('maint-ticker-list').innerHTML = '';
+  _tickers = []; _sha = ''; _updateCount();
+}
+
+async function _loadTickers() {
+  const token = localStorage.getItem('wl_token');
+  if (!token) return;
+  const list = document.getElementById('maint-ticker-list');
+  list.innerHTML = '<div style="color:#8b949e;font-size:13px;padding:8px 0">読み込み中...</div>';
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}&t=${Date.now()}`, {
+      headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json'}
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    _sha = data.sha;
+    const content = atob(data.content.replace(/\s/g, ''));
+    _tickers = content.split('\n').filter(t => t.trim());
+    localStorage.setItem('wl_fcode', _tickers.join(','));
+    _renderTickers();
+  } catch(e) {
+    list.innerHTML = `<div style="color:#f85149;font-size:13px">読み込みエラー: ${e.message}</div>`;
+  }
+}
+
+function _renderTickers() {
+  const list = document.getElementById('maint-ticker-list');
+  list.innerHTML = '';
+  _tickers.forEach((t, i) => {
+    const row = document.createElement('div');
+    row.className = 'ticker-row';
+    row.innerHTML = `<span class="ticker-row-name">${t}</span><button class="mbtn-danger" onclick="_deleteTicker(${i})">✕</button>`;
+    list.appendChild(row);
+  });
+  _updateCount();
+}
+function _updateCount() {
+  document.getElementById('maint-ticker-count').textContent = _tickers.length ? `(${_tickers.length})` : '';
+}
+function _deleteTicker(i) {
+  _tickers.splice(i, 1);
+  _renderTickers();
+}
+function addMaintTicker() {
+  const inp = document.getElementById('maint-add-input');
+  const t = inp.value.trim().toUpperCase();
+  if (!t) return;
+  if (_tickers.includes(t)) { alert(`${t} はすでに追加されています`); return; }
+  _tickers.push(t);
+  inp.value = '';
+  _renderTickers();
+}
+
+async function updateTickers() {
+  const token = localStorage.getItem('wl_token');
+  if (!token) { alert('トークンを設定してください'); return; }
+  if (_tickers.length === 0) { alert('銘柄が0件です'); return; }
+  const btn = document.getElementById('maint-update-btn');
+  const status = document.getElementById('maint-update-status');
+  btn.disabled = true; btn.textContent = '更新中...'; status.textContent = '';
+  try {
+    const content = btoa(_tickers.join('\n') + '\n');
+    const putRes = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`, {
+      method: 'PUT',
+      headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'},
+      body: JSON.stringify({message: 'Update tickers via dashboard', content, sha: _sha, branch: BRANCH})
+    });
+    if (!putRes.ok) { const e = await putRes.json(); throw new Error(e.message || `HTTP ${putRes.status}`); }
+    const putData = await putRes.json();
+    _sha = putData.content.sha;
+    localStorage.setItem('wl_fcode', _tickers.join(','));
+
+    await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/update.yml/dispatches`, {
+      method: 'POST',
+      headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json', 'Content-Type': 'application/json'},
+      body: JSON.stringify({ref: BRANCH})
+    });
+    status.textContent = '✅ 完了！Actionsを起動しました';
+    btn.textContent = '🔄 tickers.txt を更新してActions実行';
+  } catch(e) {
+    status.textContent = `❌ エラー: ${e.message}`;
+    btn.textContent = '🔄 tickers.txt を更新してActions実行';
+  }
+  btn.disabled = false;
+}
 
 // トップへ戻るボタン
 const toTopBtn = document.getElementById('totop');
