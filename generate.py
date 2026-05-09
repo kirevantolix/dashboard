@@ -601,19 +601,20 @@ function renderPriceChart(s) {
     {label:'MA25',  data:s.ma25d,  borderColor:'#d4a017', borderWidth:1.2, pointRadius:0, tension:0.3, fill:false, order:2},
     {label:'MA75',  data:s.ma75d,  borderColor:'#8b949e', borderWidth:1,   borderDash:[4,2], pointRadius:0, tension:0.3, fill:false, order:1},
   ];
-  new Chart(cv, {
+  const pc = new Chart(cv, {
     type:'line', data:{labels:s.dates, datasets},
     options:{responsive:true, maintainAspectRatio:false, animation:false,
       plugins:{legend:{display:false}, tooltip:Object.assign(tipBase(),{mode:'index',intersect:false,callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y??''}`}})},
       scales:{x:axisX(), y:axisY()}},
   });
+  cv.addEventListener('touchend', () => { pc.tooltip.setActiveElements([], {}); pc.update('none'); }, {passive:true});
 }
 
 function renderMacdChart(s) {
   const cv = document.getElementById(`mc-${s.ticker}`);
   if (!cv || cv._rendered || !s.macd_d?.length) return;
   cv._rendered = true;
-  new Chart(cv, {
+  const mc = new Chart(cv, {
     type:'line',
     data:{labels:s.dates, datasets:[
       {label:'MACD',   data:s.macd_d, borderColor:'#58a6ff', borderWidth:1.5, pointRadius:0, tension:0.2, fill:false, order:1},
@@ -623,6 +624,7 @@ function renderMacdChart(s) {
       plugins:{legend:{display:false}, tooltip:Object.assign(tipBase(),{mode:'index',intersect:false})},
       scales:{x:axisX({ticks:{display:false}}), y:axisY({ticks:{maxTicksLimit:3,font:{size:8}}})}},
   });
+  cv.addEventListener('touchend', () => { mc.tooltip.setActiveElements([], {}); mc.update('none'); }, {passive:true});
 }
 
 // ── Sort ──────────────────────────────────────────────────────────────────────
