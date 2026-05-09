@@ -455,18 +455,6 @@ canvas{display:block}
   .price{font-size:18px}
   .gauge-wrap{width:90px}
 }
-/* ── Search ───────────────────────────────────────────────────── */
-#search-btn{position:fixed;bottom:max(120px,calc(env(safe-area-inset-bottom) + 112px));right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
-#search-btn:hover{background:rgba(255,255,255,.16)}
-#search-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:400;align-items:flex-start;justify-content:center;padding-top:80px}
-#search-overlay.open{display:flex}
-#search-box{background:#1c2128;border:1px solid #30363d;border-radius:10px;padding:12px 14px;display:flex;gap:8px;align-items:center;width:min(320px,90vw);box-shadow:0 8px 32px rgba(0,0,0,.6)}
-#search-input{flex:1;background:none;border:none;outline:none;color:#e6edf3;font-size:16px;font-family:inherit;text-transform:uppercase}
-#search-input::placeholder{color:#484f58;text-transform:none}
-#search-go{padding:6px 12px;background:#238636;border:none;border-radius:6px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
-@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-6px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
-.shake{animation:shake .35s ease}
-
 /* ── Scroll to top ────────────────────────────────────────────── */
 #totop,#tobottom{position:fixed;right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .25s,background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
 #totop{bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px));opacity:0;pointer-events:none}
@@ -518,14 +506,6 @@ canvas{display:block}
   <button class="sort-btn" id="sort-down"   onclick="setSort('down')">▼ 値下がり</button>
   <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">▲ RSI</button>
 </div>
-<button id="search-btn" onclick="openSearch()" aria-label="検索">🔍</button>
-<div id="search-overlay" onclick="closeSearch(event)">
-  <div id="search-box">
-    <input id="search-input" type="text" placeholder="ティッカー例: NVDA" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase" onkeydown="if(event.key==='Enter')doSearch()">
-    <button id="search-go" onclick="doSearch()">検索</button>
-  </div>
-</div>
-
 <button id="totop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="トップへ戻る">▲</button>
 <button id="tobottom" onclick="window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})" aria-label="一番下へ">▼</button>
 
@@ -795,34 +775,6 @@ renderAll();
 const memoEl = document.getElementById('memo');
 memoEl.textContent = localStorage.getItem('wl_memo') || '';
 memoEl.addEventListener('input', () => localStorage.setItem('wl_memo', memoEl.textContent));
-
-// 検索
-function openSearch() {
-  const ov = document.getElementById('search-overlay');
-  ov.classList.add('open');
-  setTimeout(() => document.getElementById('search-input').focus(), 50);
-}
-function closeSearch(e) {
-  if (e.target === document.getElementById('search-overlay')) {
-    document.getElementById('search-overlay').classList.remove('open');
-  }
-}
-function doSearch() {
-  const q = document.getElementById('search-input').value.trim().toUpperCase();
-  document.getElementById('search-overlay').classList.remove('open');
-  if (!q) return;
-  const card = document.getElementById(`card-${q}`);
-  if (card) {
-    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } else {
-    const box = document.getElementById('search-box');
-    box.classList.remove('shake');
-    void box.offsetWidth;
-    box.classList.add('shake');
-    document.getElementById('search-overlay').classList.add('open');
-  }
-  document.getElementById('search-input').value = '';
-}
 
 // トップへ戻るボタン
 const toTopBtn = document.getElementById('totop');
