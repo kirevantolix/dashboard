@@ -360,7 +360,7 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .sf-btn.active{border-color:#58a6ff;color:#58a6ff}
 .sf-btn:active{opacity:.7}
 /* ── Popup ────────────────────────────────────────────────────── */
-.sf-popup{display:none;position:absolute;left:14px;right:14px;background:rgba(40,40,40,.97);border-radius:14px;z-index:400;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1);max-height:70vh}
+.sf-popup{display:none;position:absolute;left:14px;right:14px;background:rgba(40,40,40,.97);border-radius:14px;z-index:400;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
 .sf-popup.open{display:block}
 .sf-item{display:flex;align-items:center;padding:13px 16px;font-size:15px;color:#e6edf3;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07);gap:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .sf-item:last-child{border-bottom:none}
@@ -928,18 +928,27 @@ function togglePopup(id) {
   const isOpen = popup.classList.contains('open');
   closeAllPopups();
   if (!isOpen) {
-    // いったんリセットして下方向に仮表示
-    popup.style.top = 'calc(100% - 2px)';
-    popup.style.bottom = '';
+    // ポップアップを表示する前にコンテナの位置を計測（表示後だとコンテナ高が変わる）
+    const container = popup.closest('.sf-container');
+    const cRect = container.getBoundingClientRect();
+    const barH  = container.offsetHeight; // popupがhiddenの間 = バーの高さ
+    const margin = 12;
+    const spaceBelow = window.innerHeight - cRect.bottom - margin;
+    const spaceAbove = cRect.top - margin;
+
+    if (spaceBelow >= spaceAbove) {
+      // 下方向
+      popup.style.top       = barH + 'px';
+      popup.style.bottom    = '';
+      popup.style.maxHeight = Math.max(spaceBelow, 120) + 'px';
+    } else {
+      // 上方向
+      popup.style.top       = '';
+      popup.style.bottom    = barH + 'px';
+      popup.style.maxHeight = Math.max(spaceAbove, 120) + 'px';
+    }
     popup.classList.add('open');
     document.getElementById('sf-backdrop').classList.add('open');
-    // 画面下からはみ出す場合は上方向に切り替え
-    const rect = popup.getBoundingClientRect();
-    const margin = 12;
-    if (rect.bottom > window.innerHeight - margin) {
-      popup.style.top = '';
-      popup.style.bottom = 'calc(100% - 2px)';
-    }
   }
 }
 function closeAllPopups() {
@@ -947,6 +956,7 @@ function closeAllPopups() {
     p.classList.remove('open');
     p.style.top = '';
     p.style.bottom = '';
+    p.style.maxHeight = '';
   });
   document.getElementById('sf-backdrop').classList.remove('open');
 }
