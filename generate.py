@@ -360,7 +360,7 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .sf-btn.active{border-color:#58a6ff;color:#58a6ff}
 .sf-btn:active{opacity:.7}
 /* ── Popup ────────────────────────────────────────────────────── */
-.sf-popup{display:none;position:absolute;left:14px;right:14px;background:rgba(40,40,40,.97);border-radius:14px;z-index:400;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
+.sf-popup{display:none;position:absolute;left:14px;right:14px;background:rgba(40,40,40,.97);border-radius:14px;z-index:400;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1);max-height:70vh}
 .sf-popup.open{display:block}
 .sf-item{display:flex;align-items:center;padding:13px 16px;font-size:15px;color:#e6edf3;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07);gap:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .sf-item:last-child{border-bottom:none}
@@ -590,6 +590,7 @@ canvas{display:block}
     <div class="sf-item" onclick="setSort('down')">    <span class="sf-check" id="ck-down"></span>値下がり順</div>
     <div class="sf-item" onclick="setSort('rsi-desc')"><span class="sf-check" id="ck-rsi-desc"></span>RSI High</div>
     <div class="sf-item" onclick="setSort('rsi-asc')"> <span class="sf-check" id="ck-rsi-asc"></span>RSI Low</div>
+    <div class="sf-item" onclick="setSort('w52h')">    <span class="sf-check" id="ck-w52h"></span>52W High %</div>
   </div>
 
   <!-- Filter popup -->
@@ -644,7 +645,7 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
 };
 // ── Sort & Filter state ───────────────────────────────────────────────────────
-const SORT_LABELS = {sector:'セクター順', up:'値上がり順', down:'値下がり順', 'rsi-desc':'RSI High', 'rsi-asc':'RSI Low'};
+const SORT_LABELS = {sector:'セクター順', up:'値上がり順', down:'値下がり順', 'rsi-desc':'RSI High', 'rsi-asc':'RSI Low', w52h:'52W High %'};
 let sortMode = LS.get('wl_sort', 'sector');
 if (!SORT_LABELS[sortMode]) sortMode = 'sector';
 
@@ -814,6 +815,7 @@ function getVisibleStocks() {
   else if (sortMode === 'down')     list.sort((a,b) => a.pct - b.pct);
   else if (sortMode === 'rsi-desc') list.sort((a,b) => (b.rsi||0) - (a.rsi||0));
   else if (sortMode === 'rsi-asc')  list.sort((a,b) => (a.rsi||0) - (b.rsi||0));
+  else if (sortMode === 'w52h')     list.sort((a,b) => (b.w52h_pct??-999) - (a.w52h_pct??-999));
   // sector: STOCKS配列順のまま
   return list;
 }
