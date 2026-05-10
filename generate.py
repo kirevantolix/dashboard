@@ -402,7 +402,8 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .status-bar.bearish{background:linear-gradient(90deg,#da3633,#f85149)}
 .status-bar.neutral{background:linear-gradient(90deg,#9e6a03,#d29922)}
 .card-header{padding:10px 12px 5px}
-.ticker-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.card-title-row{display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:nowrap}
+.ticker-badges{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;min-width:0}
 .ticker{font-size:18px;font-weight:800;color:#e6edf3}
 .company-name{font-size:10px;color:#8b949e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 
@@ -759,9 +760,12 @@ function buildCard(s) {
   return `
     <div class="status-bar ${s.status}"></div>
     <div class="card-header">
-      <div class="ticker-row">
-        <span class="ticker">${s.ticker}</span>
-        ${statusBadge}${crossBadges}${maBadge}
+      <div class="card-title-row">
+        <div class="ticker-badges">
+          <span class="ticker">${s.ticker}</span>
+          ${statusBadge}${crossBadges}
+        </div>
+        ${maBadge}
       </div>
       <div class="company-name">${s.name}</div>
     </div>
