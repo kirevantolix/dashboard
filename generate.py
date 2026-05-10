@@ -360,8 +360,10 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .sf-btn.active{border-color:#58a6ff;color:#58a6ff}
 .sf-btn:active{opacity:.7}
 /* ── Popup ────────────────────────────────────────────────────── */
-.sf-popup{display:none;position:absolute;left:14px;right:14px;background:rgba(40,40,40,.97);border-radius:14px;z-index:400;overflow-y:auto;-webkit-overflow-scrolling:touch;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
-.sf-popup.open{display:block}
+.sf-popup-wrap{display:none;position:absolute;left:14px;right:14px;z-index:400;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
+.sf-popup-wrap.open{display:block}
+.sf-popup{background:rgba(40,40,40,.97);border-radius:14px;overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:50vh}
+.sf-fade{position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,rgba(40,40,40,.97));border-radius:0 0 14px 14px;pointer-events:none;transition:opacity .15s}
 .sf-item{display:flex;align-items:center;padding:13px 16px;font-size:15px;color:#e6edf3;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07);gap:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .sf-item:last-child{border-bottom:none}
 .sf-item:active{background:rgba(255,255,255,.09)}
@@ -584,22 +586,28 @@ canvas{display:block}
   </div>
 
   <!-- Sort popup -->
-  <div class="sf-popup" id="sort-popup">
-    <div class="sf-item" onclick="setSort('sector')">  <span class="sf-check" id="ck-sector"></span>セクター順</div>
-    <div class="sf-item" onclick="setSort('up')">      <span class="sf-check" id="ck-up"></span>値上がり順</div>
-    <div class="sf-item" onclick="setSort('down')">    <span class="sf-check" id="ck-down"></span>値下がり順</div>
-    <div class="sf-item" onclick="setSort('rsi-desc')"><span class="sf-check" id="ck-rsi-desc"></span>RSI High</div>
-    <div class="sf-item" onclick="setSort('rsi-asc')"> <span class="sf-check" id="ck-rsi-asc"></span>RSI Low</div>
-    <div class="sf-item" onclick="setSort('w52h')">    <span class="sf-check" id="ck-w52h"></span>52W High %</div>
+  <div class="sf-popup-wrap" id="sort-popup">
+    <div class="sf-popup" id="sort-popup-inner">
+      <div class="sf-item" onclick="setSort('sector')">  <span class="sf-check" id="ck-sector"></span>セクター順</div>
+      <div class="sf-item" onclick="setSort('up')">      <span class="sf-check" id="ck-up"></span>値上がり順</div>
+      <div class="sf-item" onclick="setSort('down')">    <span class="sf-check" id="ck-down"></span>値下がり順</div>
+      <div class="sf-item" onclick="setSort('rsi-desc')"><span class="sf-check" id="ck-rsi-desc"></span>RSI High</div>
+      <div class="sf-item" onclick="setSort('rsi-asc')"> <span class="sf-check" id="ck-rsi-asc"></span>RSI Low</div>
+      <div class="sf-item" onclick="setSort('w52h')">    <span class="sf-check" id="ck-w52h"></span>52W High %</div>
+    </div>
+    <div class="sf-fade" id="sort-fade"></div>
   </div>
 
   <!-- Filter popup -->
-  <div class="sf-popup" id="filter-popup">
-    <div class="sf-item" onclick="setFilter('all')">       <span class="sf-check" id="fk-all"></span>すべて</div>
-    <div class="sf-item" onclick="setFilter('gc')">        <span class="sf-check" id="fk-gc"></span>ゴールデンクロス</div>
-    <div class="sf-item" onclick="setFilter('ath')">       <span class="sf-check" id="fk-ath"></span>新高値ブレイク</div>
-    <div class="sf-item" onclick="setFilter('rsi-high')">  <span class="sf-check" id="fk-rsi-high"></span>RSI 70以上</div>
-    <div class="sf-item" onclick="setFilter('rsi-low')">   <span class="sf-check" id="fk-rsi-low"></span>RSI 30以下</div>
+  <div class="sf-popup-wrap" id="filter-popup">
+    <div class="sf-popup" id="filter-popup-inner">
+      <div class="sf-item" onclick="setFilter('all')">       <span class="sf-check" id="fk-all"></span>すべて</div>
+      <div class="sf-item" onclick="setFilter('gc')">        <span class="sf-check" id="fk-gc"></span>ゴールデンクロス</div>
+      <div class="sf-item" onclick="setFilter('ath')">       <span class="sf-check" id="fk-ath"></span>新高値ブレイク</div>
+      <div class="sf-item" onclick="setFilter('rsi-high')">  <span class="sf-check" id="fk-rsi-high"></span>RSI 70以上</div>
+      <div class="sf-item" onclick="setFilter('rsi-low')">   <span class="sf-check" id="fk-rsi-low"></span>RSI 30以下</div>
+    </div>
+    <div class="sf-fade" id="filter-fade"></div>
   </div>
 </div>
 <div class="sf-backdrop" id="sf-backdrop" onclick="closeAllPopups()"></div>
@@ -924,39 +932,42 @@ function renderMacdChart(s) {
 
 // ── Popup control ─────────────────────────────────────────────────────────────
 function togglePopup(id) {
-  const popup = document.getElementById(id);
-  const isOpen = popup.classList.contains('open');
+  const wrap = document.getElementById(id);
+  const isOpen = wrap.classList.contains('open');
   closeAllPopups();
   if (!isOpen) {
-    // ポップアップを表示する前にコンテナの位置を計測（表示後だとコンテナ高が変わる）
-    const container = popup.closest('.sf-container');
+    // 表示前にバーの位置を計測
+    const container = wrap.closest('.sf-container');
+    const barH  = container.offsetHeight; // popup非表示中 = バーの高さ
     const cRect = container.getBoundingClientRect();
-    const barH  = container.offsetHeight; // popupがhiddenの間 = バーの高さ
-    const margin = 12;
+    const margin = 16;
     const spaceBelow = window.innerHeight - cRect.bottom - margin;
-    const spaceAbove = cRect.top - margin;
 
-    if (spaceBelow >= spaceAbove) {
-      // 下方向
-      popup.style.top       = barH + 'px';
-      popup.style.bottom    = '';
-      popup.style.maxHeight = Math.max(spaceBelow, 120) + 'px';
-    } else {
-      // 上方向
-      popup.style.top       = '';
-      popup.style.bottom    = barH + 'px';
-      popup.style.maxHeight = Math.max(spaceAbove, 120) + 'px';
-    }
-    popup.classList.add('open');
+    // 常に下方向。max-heightを利用可能スペースに合わせる
+    wrap.style.top = barH + 'px';
+    const inner = wrap.querySelector('.sf-popup');
+    inner.style.maxHeight = Math.max(spaceBelow, 120) + 'px';
+
+    wrap.classList.add('open');
     document.getElementById('sf-backdrop').classList.add('open');
+
+    // フェードインジケーターの表示制御（スクロール可能なら表示）
+    const fade = wrap.querySelector('.sf-fade');
+    const updateFade = () => {
+      const scrollable = inner.scrollHeight > inner.clientHeight;
+      const atBottom   = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 4;
+      fade.style.opacity = (scrollable && !atBottom) ? '1' : '0';
+    };
+    updateFade();
+    inner.addEventListener('scroll', updateFade, { passive: true });
   }
 }
 function closeAllPopups() {
-  document.querySelectorAll('.sf-popup').forEach(p => {
-    p.classList.remove('open');
-    p.style.top = '';
-    p.style.bottom = '';
-    p.style.maxHeight = '';
+  document.querySelectorAll('.sf-popup-wrap').forEach(wrap => {
+    wrap.classList.remove('open');
+    wrap.style.top = '';
+    const inner = wrap.querySelector('.sf-popup');
+    if (inner) inner.style.maxHeight = '';
   });
   document.getElementById('sf-backdrop').classList.remove('open');
 }
