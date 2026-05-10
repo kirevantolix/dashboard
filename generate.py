@@ -360,9 +360,9 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 .sf-btn.active{border-color:#58a6ff;color:#58a6ff}
 .sf-btn:active{opacity:.7}
 /* ── Popup ────────────────────────────────────────────────────── */
-.sf-popup-wrap{display:none;position:absolute;left:14px;right:14px;z-index:400;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
+.sf-popup-wrap{display:none;position:fixed;z-index:400;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,.6);border:1px solid rgba(255,255,255,.1)}
 .sf-popup-wrap.open{display:block}
-.sf-popup{background:rgba(40,40,40,.97);border-radius:14px;overflow-y:auto;-webkit-overflow-scrolling:touch;max-height:50vh}
+.sf-popup{background:rgba(40,40,40,.97);border-radius:14px;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .sf-fade{position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,rgba(40,40,40,.97));border-radius:0 0 14px 14px;pointer-events:none;transition:opacity .15s}
 .sf-item{display:flex;align-items:center;padding:13px 16px;font-size:15px;color:#e6edf3;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.07);gap:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .sf-item:last-child{border-bottom:none}
@@ -936,36 +936,46 @@ function togglePopup(id) {
   const isOpen = wrap.classList.contains('open');
   closeAllPopups();
   if (!isOpen) {
-    // 表示前にバーの位置を計測
-    const container = wrap.closest('.sf-container');
-    const barH  = container.offsetHeight; // popup非表示中 = バーの高さ
-    const cRect = container.getBoundingClientRect();
-    const margin = 16;
-    const spaceBelow = window.innerHeight - cRect.bottom - margin;
+    // トリガーボタンのViewport座標を取得
+    const btnId = id === 'sort-popup' ? 'sort-btn' : 'filter-btn';
+    const btn   = document.getElementById(btnId);
+    const bRect = btn.getBoundingClientRect();
+    const margin = 10;
 
-    // 常に下方向。max-heightを利用可能スペースに合わせる
-    wrap.style.top = barH + 'px';
+    // ポップアップ幅 = ボタン幅
+    wrap.style.width = bRect.width + 'px';
+    wrap.style.left  = bRect.left + 'px';
+
+    // ボタン下端からの余白
+    const spaceBelow = window.innerHeight - bRect.bottom - margin;
     const inner = wrap.querySelector('.sf-popup');
-    inner.style.maxHeight = Math.max(spaceBelow, 120) + 'px';
+    inner.style.maxHeight = Math.max(spaceBelow, 100) + 'px';
+
+    // 常にボタン直下 (fixed なので viewport 基準)
+    wrap.style.top = (bRect.bottom + 4) + 'px';
 
     wrap.classList.add('open');
     document.getElementById('sf-backdrop').classList.add('open');
 
-    // フェードインジケーターの表示制御（スクロール可能なら表示）
+    // フェードインジケーターの表示制御
     const fade = wrap.querySelector('.sf-fade');
     const updateFade = () => {
       const scrollable = inner.scrollHeight > inner.clientHeight;
       const atBottom   = inner.scrollTop + inner.clientHeight >= inner.scrollHeight - 4;
       fade.style.opacity = (scrollable && !atBottom) ? '1' : '0';
     };
-    updateFade();
+    inner.removeEventListener('scroll', inner._fadeHandler);
+    inner._fadeHandler = updateFade;
     inner.addEventListener('scroll', updateFade, { passive: true });
+    updateFade();
   }
 }
 function closeAllPopups() {
   document.querySelectorAll('.sf-popup-wrap').forEach(wrap => {
     wrap.classList.remove('open');
     wrap.style.top = '';
+    wrap.style.left = '';
+    wrap.style.width = '';
     const inner = wrap.querySelector('.sf-popup');
     if (inner) inner.style.maxHeight = '';
   });
