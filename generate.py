@@ -507,6 +507,17 @@ canvas{display:block}
 .drag-handle:active{cursor:grabbing}
 .ticker-row-name{font-size:14px;font-weight:600;color:#e6edf3;flex:1}
 .maint-status{font-size:12px;color:#8b949e;margin-top:8px;min-height:16px}
+/* ── Confirm Dialog ───────────────────────────────────────────── */
+#confirm-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;align-items:center;justify-content:center;padding:20px}
+#confirm-overlay.open{display:flex}
+#confirm-dialog{background:#1c2128;border-radius:14px;width:100%;max-width:300px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+#confirm-dialog .cd-title{font-size:17px;font-weight:700;color:#e6edf3;text-align:center;padding:20px 20px 8px}
+#confirm-dialog .cd-msg{font-size:13px;color:#8b949e;text-align:center;padding:0 20px 20px;line-height:1.5}
+#confirm-dialog .cd-btns{display:flex;border-top:1px solid #30363d}
+#confirm-dialog .cd-btn{flex:1;padding:14px 0;font-size:17px;font-family:inherit;border:none;background:none;cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+#confirm-dialog .cd-btn-cancel{color:#8b949e;border-right:1px solid #30363d}
+#confirm-dialog .cd-btn-ok{color:#58a6ff;font-weight:600}
+#confirm-dialog .cd-btn:active{background:rgba(255,255,255,.06)}
 #maint-gear{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px;line-height:1;-webkit-tap-highlight-color:transparent}
 #maint-gear:hover{color:#e6edf3}
 
@@ -1235,10 +1246,19 @@ function addMaintTicker() {
   _renderTickers();
 }
 
-async function updateTickers() {
-  const token = localStorage.getItem('wl_token');
-  if (!token) { alert('トークンが未設定です'); return; }
+function updateTickers() {
+  // 事前チェック（ダイアログ前に弾く）
+  if (!localStorage.getItem('wl_token')) { alert('トークンが未設定です'); return; }
   if (_tickers.length === 0) { alert('銘柄が0件です'); return; }
+  // 確認ダイアログを表示
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+function closeConfirm() {
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+async function confirmUpdate() {
+  closeConfirm();
+  const token = localStorage.getItem('wl_token');
 
   const btn = document.getElementById('maint-update-btn');
   const origText = btn.textContent;
@@ -1339,6 +1359,18 @@ window.addEventListener('scroll', () => {
   toBotBtn.classList.toggle('visible', scrolled);
 }, {passive: true});
 </script>
+
+<!-- Confirm Dialog -->
+<div id="confirm-overlay">
+  <div id="confirm-dialog">
+    <div class="cd-title">確認</div>
+    <div class="cd-msg">tickers.txtを更新して<br>GitHub Actionsを実行しますか？</div>
+    <div class="cd-btns">
+      <button class="cd-btn cd-btn-cancel" onclick="closeConfirm()">キャンセル</button>
+      <button class="cd-btn cd-btn-ok" onclick="confirmUpdate()">更新する</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
 """
