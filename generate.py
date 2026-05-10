@@ -499,9 +499,13 @@ canvas{display:block}
 .mbtn-primary:disabled{opacity:.5;cursor:default}
 .mbtn-secondary{background:#1c2128;color:#e6edf3;border:1px solid #30363d}
 .mbtn-danger{background:none;border:none;color:#f85149;font-size:18px;cursor:pointer;padding:2px 8px;line-height:1}
-.ticker-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #21262d}
+.ticker-row{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid #21262d;transition:background .1s}
 .ticker-row:last-child{border-bottom:none}
-.ticker-row-name{font-size:14px;font-weight:600;color:#e6edf3}
+.ticker-row.drag-over{background:rgba(88,166,255,.08);border-radius:6px}
+.ticker-row.dragging{opacity:.35}
+.drag-handle{color:#484f58;font-size:16px;cursor:grab;padding:2px 4px;flex-shrink:0;touch-action:none;-webkit-tap-highlight-color:transparent;line-height:1}
+.drag-handle:active{cursor:grabbing}
+.ticker-row-name{font-size:14px;font-weight:600;color:#e6edf3;flex:1}
 .maint-status{font-size:12px;color:#8b949e;margin-top:8px;min-height:16px}
 #maint-gear{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px;line-height:1;-webkit-tap-highlight-color:transparent}
 #maint-gear:hover{color:#e6edf3}
@@ -1113,9 +1117,11 @@ function _renderTickers() {
   _tickers.forEach((t, i) => {
     const row = document.createElement('div');
     row.className = 'ticker-row';
-    row.innerHTML = `<span class="ticker-row-name">${t}</span><button class="mbtn-danger" onclick="_deleteTicker(${i})">✕</button>`;
+    row.dataset.idx = i;
+    row.innerHTML = `<span class="drag-handle" title="ドラッグして並び替え">☰</span><span class="ticker-row-name">${t}</span><button class="mbtn-danger" onclick="_deleteTicker(${i})">✕</button>`;
     list.appendChild(row);
   });
+  _initDnD(list);
   _updateCount();
 }
 function _updateCount() {
@@ -1124,6 +1130,100 @@ function _updateCount() {
 function _deleteTicker(i) {
   _tickers.splice(i, 1);
   _renderTickers();
+}
+
+// ── Drag & Drop (mouse + touch) ───────────────────────────────────────────────
+function _initDnD(list) {
+  let dragSrc = null;   // ドラッグ中の行要素
+  let touchClone = null;// タッチ用の視覚的クローン
+
+  // ── マウス DnD ────────────────────────────────────────────────
+  list.querySelectorAll('.drag-handle').forEach(handle => {
+    const row = handle.closest('.ticker-row');
+    row.draggable = true;
+
+    row.addEventListener('dragstart', e => {
+      dragSrc = row;
+      row.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('dragging');
+      list.querySelectorAll('.ticker-row').forEach(r => r.classList.remove('drag-over'));
+      dragSrc = null;
+    });
+    row.addEventListener('dragover', e => {
+      e.preventDefault();
+      if (dragSrc && dragSrc !== row) row.classList.add('drag-over');
+    });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', e => {
+      e.preventDefault();
+      row.classList.remove('drag-over');
+      if (!dragSrc || dragSrc === row) return;
+      const rows = [...list.querySelectorAll('.ticker-row')];
+      const fromIdx = rows.indexOf(dragSrc);
+      const toIdx   = rows.indexOf(row);
+      _tickers.splice(toIdx, 0, _tickers.splice(fromIdx, 1)[0]);
+      _renderTickers();
+    });
+  });
+
+  // ── タッチ DnD ────────────────────────────────────────────────
+  list.querySelectorAll('.drag-handle').forEach(handle => {
+    handle.addEventListener('touchstart', e => {
+      const row = handle.closest('.ticker-row');
+      dragSrc = row;
+      row.classList.add('dragging');
+
+      // 視覚的クローンを作成
+      touchClone = row.cloneNode(true);
+      touchClone.style.cssText = `
+        position:fixed;z-index:9999;pointer-events:none;opacity:.85;
+        background:#2d333b;border-radius:6px;padding:4px 12px;
+        width:${row.offsetWidth}px;box-shadow:0 4px 16px rgba(0,0,0,.4);
+        left:${row.getBoundingClientRect().left}px;
+        top:${row.getBoundingClientRect().top}px;
+      `;
+      document.body.appendChild(touchClone);
+      e.preventDefault();
+    }, { passive: false });
+
+    handle.addEventListener('touchmove', e => {
+      if (!dragSrc || !touchClone) return;
+      const touch = e.touches[0];
+      touchClone.style.left = (touch.clientX - touchClone.offsetWidth / 2) + 'px';
+      touchClone.style.top  = (touch.clientY - 24) + 'px';
+
+      // ホバー先の行を特定
+      touchClone.style.display = 'none';
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      touchClone.style.display = '';
+      const overRow = el?.closest('.ticker-row');
+      list.querySelectorAll('.ticker-row').forEach(r => r.classList.remove('drag-over'));
+      if (overRow && overRow !== dragSrc) overRow.classList.add('drag-over');
+      e.preventDefault();
+    }, { passive: false });
+
+    handle.addEventListener('touchend', e => {
+      if (!dragSrc) return;
+      if (touchClone) { touchClone.remove(); touchClone = null; }
+      dragSrc.classList.remove('dragging');
+      list.querySelectorAll('.ticker-row').forEach(r => r.classList.remove('drag-over'));
+
+      const touch = e.changedTouches[0];
+      const el = document.elementFromPoint(touch.clientX, touch.clientY);
+      const overRow = el?.closest('.ticker-row');
+      if (overRow && overRow !== dragSrc) {
+        const rows = [...list.querySelectorAll('.ticker-row')];
+        const fromIdx = rows.indexOf(dragSrc);
+        const toIdx   = rows.indexOf(overRow);
+        _tickers.splice(toIdx, 0, _tickers.splice(fromIdx, 1)[0]);
+        _renderTickers();
+      }
+      dragSrc = null;
+    });
+  });
 }
 function addMaintTicker() {
   const inp = document.getElementById('maint-add-input');
