@@ -371,6 +371,18 @@ h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
 
 /* ── Search Bar ───────────────────────────────────────────────── */
 .search-bar{padding:4px 14px 6px}
+
+/* ── Alert Bar ────────────────────────────────────────────────── */
+.alert-bar{padding:2px 14px 4px;display:flex;flex-direction:column;gap:3px}
+.alert-row{display:flex;align-items:center;gap:5px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.alert-row::-webkit-scrollbar{display:none}
+.alert-lbl{font-size:10px;font-weight:700;flex-shrink:0;white-space:nowrap}
+.alert-chip{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.alert-chip:active{opacity:.7}
+.alert-row-gc .alert-lbl{color:#d4a017}
+.alert-row-gc .alert-chip{background:#2d2500;color:#d4a017;border:1px solid rgba(212,160,23,.4)}
+.alert-row-ath .alert-lbl{color:#3fb950}
+.alert-row-ath .alert-chip{background:#1a3824;color:#3fb950;border:1px solid rgba(63,185,80,.4)}
 .search-wrap{display:flex;align-items:center;gap:8px;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:7px 10px;transition:border-color .2s}
 .search-wrap:focus-within{border-color:#58a6ff}
 .search-icon{color:#484f58;font-size:13px;flex-shrink:0;line-height:1;pointer-events:none}
@@ -598,6 +610,18 @@ canvas{display:block}
       onkeydown="if(event.key==='Enter')doSearch()">
   </div>
 </div>
+<!-- Alert Bar -->
+<div class="alert-bar" id="alert-bar">
+  <div class="alert-row alert-row-gc" id="alert-gc-row">
+    <span class="alert-lbl">🌟 GC</span>
+    <div id="alert-gc-chips" style="display:flex;gap:4px"></div>
+  </div>
+  <div class="alert-row alert-row-ath" id="alert-ath-row">
+    <span class="alert-lbl">🏆 新高値</span>
+    <div id="alert-ath-chips" style="display:flex;gap:4px"></div>
+  </div>
+</div>
+
 <button id="totop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="トップへ戻る">▲</button>
 <button id="tobottom" onclick="window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})" aria-label="一番下へ">▼</button>
 
@@ -790,6 +814,34 @@ function getVisibleStocks() {
   return list;
 }
 
+// ── Alert Bar ─────────────────────────────────────────────────────────────────
+function renderAlertBar() {
+  const gcList  = STOCKS.filter(s => s.gc);
+  const athList = STOCKS.filter(s => s.w52h_pct != null && s.w52h_pct >= 0);
+
+  function fillChips(stocks, containerId) {
+    const wrap = document.getElementById(containerId);
+    wrap.innerHTML = '';
+    stocks.forEach(s => {
+      const chip = document.createElement('span');
+      chip.className = 'alert-chip';
+      chip.textContent = s.ticker;
+      chip.addEventListener('click', () => {
+        const card = document.getElementById(`card-${s.ticker}`);
+        if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      wrap.appendChild(chip);
+    });
+  }
+
+  fillChips(gcList,  'alert-gc-chips');
+  fillChips(athList, 'alert-ath-chips');
+
+  document.getElementById('alert-gc-row').style.display  = gcList.length  ? 'flex' : 'none';
+  document.getElementById('alert-ath-row').style.display = athList.length ? 'flex' : 'none';
+  document.getElementById('alert-bar').style.display     = (gcList.length || athList.length) ? '' : 'none';
+}
+
 function renderAll() {
   if (ioRef) ioRef.disconnect();
 
@@ -937,6 +989,7 @@ window.scrollTo(0, 0);
 
 _updateSortUI();
 _updateFilterUI();
+renderAlertBar();
 renderAll();
 
 // ── Search ────────────────────────────────────────────────────────────────────
