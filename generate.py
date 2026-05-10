@@ -491,7 +491,7 @@ canvas{display:block}
 .maint-title{font-size:16px;font-weight:700;color:#e6edf3;flex:1}
 .maint-sec{padding:16px 14px;border-bottom:1px solid #21262d}
 .maint-sec-lbl{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
-.maint-input{width:100%;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:9px 10px;color:#e6edf3;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box}
+.maint-input{width:100%;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:9px 10px;color:#e6edf3;font-size:16px;font-family:inherit;outline:none;box-sizing:border-box}
 .maint-input:focus{border-color:#58a6ff}
 .maint-row{display:flex;gap:8px;margin-top:8px}
 .mbtn{padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;flex-shrink:0}
