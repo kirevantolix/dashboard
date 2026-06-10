@@ -6,7 +6,7 @@ on:
     - cron: '40 13 * * *'  # 日本時間 夜22時40分 (UTC 13:40)
     - cron: '40 14 * * *'  # 日本時間 夜23時40分 (UTC 14:40)
     - cron: '0 17 * * *'   # 日本時間 朝2時 (UTC 17:00)
-  workflow_dispatch:       # 手動実行ボタン
+  workflow_dispatch:        # 手動実行ボタン
 
 permissions:
   contents: write
@@ -23,7 +23,6 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,7 +34,7 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install yfinance requests pillow
+        run: pip install -r requirements.txt
 
       - name: Generate dashboard.html
         run: python generate.py
