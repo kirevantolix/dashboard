@@ -1,595 +1,1039 @@
+#!/usr/bin/env python3
+"""US Stock Watchlist Dashboard Generator
+Usage: python generate.py
+Reads tickers.txt (1 ticker per line). Falls back to built-in list if not found.
+"""
+
+import os
+import random
+import base64
+import io
+import json
+import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone, timedelta
 import yfinance as yf
 import pandas as pd
-import json
-import requests
-import re
-from datetime import datetime
-from pathlib import Path
+from PIL import Image, ImageDraw
 
-# ── 設定 ──────────────────────────────────────────────
-WATCHLIST_FILE = "watchlist.txt"
-OUTPUT_FILE = "dashboard.html"
-RSI_PERIOD = 14
-MACD_FAST, MACD_SLOW, MACD_SIGNAL = 12, 26, 9
-MA_SHORT, MA_LONG = 25, 75
-VOL_SPIKE_RATIO = 1.5
-GC_DC_WINDOW = 5
-CHART_DAYS = 90
+# ── Tickers ────────────────────────────────────────────────────────────────────
 
-# ── 感情分析キーワード ────────────────────────────────
-POS_KEYWORDS = ["surge", "jump", "beat", "record", "gain", "rise", "rally", "soar",
-                "growth", "profit", "upgrade", "buy", "strong", "bullish", "boost"]
-NEG_KEYWORDS = ["drop", "fall", "miss", "loss", "decline", "cut", "sell", "weak",
-                "bearish", "crash", "warn", "downgrade", "risk", "concern", "plunge"]
+_DEFAULT_TICKERS = [
+    'ARM', 'AMD', 'SOXL', 'LPTH', 'TECL', 'NBIS', 'SNDK', 'TSM', 'CRDO',
+    'NVDA', 'NUGT', 'LITE', 'AMZN', 'MU', 'IREN', 'EWY', 'META', 'OSCR',
+    'ZM', 'MSFT', 'QQQ', 'HOOD', 'GOOG', 'APP',
+]
 
-def sentiment(text):
-    t = text.lower()
-    pos = sum(1 for w in POS_KEYWORDS if w in t)
-    neg = sum(1 for w in NEG_KEYWORDS if w in t)
-    if pos > neg: return "positive"
-    if neg > pos: return "negative"
-    return "neutral"
+if os.path.exists('tickers.txt'):
+    with open('tickers.txt') as _f:
+        TICKERS = [l.strip().upper() for l in _f if l.strip() and not l.startswith('#')]
+    print(f"Loaded {len(TICKERS)} tickers from tickers.txt")
+else:
+    TICKERS = _DEFAULT_TICKERS
+    print(f"tickers.txt not found — using default {len(TICKERS)} tickers")
 
-# ── テクニカル指標 ────────────────────────────────────
-def calc_rsi(close, period=14):
-    delta = close.diff()
-    gain = delta.clip(lower=0).rolling(period).mean()
-    loss = (-delta.clip(upper=0)).rolling(period).mean()
-    rs = gain / loss.replace(0, float('nan'))
-    return (100 - 100 / (1 + rs)).iloc[-1]
+# ── Company Names ──────────────────────────────────────────────────────────────
 
-def calc_macd(close):
-    ema_fast = close.ewm(span=MACD_FAST, adjust=False).mean()
-    ema_slow = close.ewm(span=MACD_SLOW, adjust=False).mean()
-    macd_line = ema_fast - ema_slow
-    signal_line = macd_line.ewm(span=MACD_SIGNAL, adjust=False).mean()
-    histogram = macd_line - signal_line
-    return macd_line, signal_line, histogram
+NAMES = {
+    'NVDA':'NVIDIA',        'AAPL':'Apple',            'MSFT':'Microsoft',
+    'GOOGL':'Alphabet',     'AMZN':'Amazon',           'META':'Meta Platforms',
+    'AVGO':'Broadcom',      'TSLA':'Tesla',            'ORCL':'Oracle',
+    'AMD':'AMD',            'INTC':'Intel',            'NFLX':'Netflix',
+    'PLTR':'Palantir',      'QCOM':'Qualcomm',         'APP':'AppLovin',
+    'MU':'Micron',          'SNDK':'Sandisk',          'NBIS':'Nebius',
+    'ARM':'Arm Holdings',   'TSM':'TSMC',              'LITE':'Lumentum',
+    'CRDO':'Credo Technology','LPTH':'LightPath',      'GS':'Goldman Sachs',
+    'KO':'Coca-Cola',       'NU':'Nu Holdings',        'OSCR':'Oscar Health',
+    'SPY':'S&P 500 ETF',    'QQQ':'Nasdaq ETF',        'IWM':'Russell 2000 ETF',
+    'VT':'Vanguard All-World ETF','SOXL':'Semiconductor Bull 3X',
+    'SLV':'Silver Trust',   'COPX':'Copper Miners ETF','GLD':'Gold Shares',
+}
 
-def detect_cross(ma_short, ma_long, window=5):
-    crosses = []
-    for i in range(1, len(ma_short)):
-        prev_diff = ma_short.iloc[i-1] - ma_long.iloc[i-1]
-        curr_diff = ma_short.iloc[i] - ma_long.iloc[i]
-        if prev_diff < 0 and curr_diff > 0:
-            crosses.append({"idx": i, "type": "GC"})
-        elif prev_diff > 0 and curr_diff < 0:
-            crosses.append({"idx": i, "type": "DC"})
-    recent = [c for c in crosses if c["idx"] >= len(ma_short) - window]
-    latest = crosses[-1] if crosses else None
-    return recent, latest
+# ── Touch Icon ─────────────────────────────────────────────────────────────────
 
-# ── ニュース取得 ──────────────────────────────────────
-def fetch_news(ticker):
+def make_touch_icon():
+    S = 180
+    img = Image.new('RGB', (S, S), (22, 27, 34))
+    d   = ImageDraw.Draw(img)
+    green = (63, 185, 80)
+    white = (230, 237, 243)
+
+    bar_w, gap = 16, 8
+    heights = [38, 22, 50, 34, 62, 46, 80]
+    x0, base_y = 14, 155
+
+    for i, h in enumerate(heights):
+        lx = x0 + i * (bar_w + gap)
+        d.rectangle([lx, base_y - h, lx + bar_w, base_y], fill=green)
+
+    cx = [x0 + i * (bar_w + gap) + bar_w // 2 for i in range(len(heights))]
+    pts = list(zip(cx, [base_y - h for h in heights]))
+    for i in range(len(pts) - 1):
+        d.line([pts[i], pts[i + 1]], fill=white, width=7)
+    ax, ay = pts[-1]
+    d.polygon([(ax, ay - 12), (ax + 12, ay + 6), (ax - 12, ay + 6)], fill=white)
+    return img
+
+icon_img = make_touch_icon()
+icon_img.save('apple-touch-icon.png')
+icon_img.save('favicon.png')
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def calc_rsi(prices, n=14):
+    d = prices.diff()
+    g = d.clip(lower=0).ewm(com=n - 1, min_periods=n).mean()
+    l = (-d.clip(upper=0)).ewm(com=n - 1, min_periods=n).mean()
+    rs = g / l.replace(0, float('nan'))
+    return 100 - 100 / (1 + rs)
+
+def calc_macd(prices, fast=12, slow=26, sig=9):
+    ef = prices.ewm(span=fast, adjust=False).mean()
+    es = prices.ewm(span=slow, adjust=False).mean()
+    m = ef - es
+    s = m.ewm(span=sig, adjust=False).mean()
+    return m, s, m - s
+
+def detect_crosses(ma_s, ma_l, lookback=5):
+    gc_idx, dc_idx = [], []
+    for i in range(1, len(ma_s)):
+        if pd.isna(ma_s.iloc[i - 1]) or pd.isna(ma_l.iloc[i - 1]):
+            continue
+        prev = ma_s.iloc[i - 1] - ma_l.iloc[i - 1]
+        curr = ma_s.iloc[i] - ma_l.iloc[i]
+        if prev < 0 < curr:
+            gc_idx.append(i)
+        if prev > 0 > curr:
+            dc_idx.append(i)
+    n = len(ma_s)
+    rec = set(range(max(0, n - lookback), n))
+    return gc_idx, dc_idx, bool(rec & set(gc_idx)), bool(rec & set(dc_idx))
+
+def overall_status(rsi, ma25, ma75, pct):
+    sc = 0
+    if rsi > 55:
+        sc += 1
+    elif rsi < 45:
+        sc -= 1
+    if ma25 and ma75:
+        sc += 1 if ma25 > ma75 else -1
+    sc += 1 if pct > 0.5 else (-1 if pct < -0.5 else 0)
+    return 'bullish' if sc >= 2 else ('bearish' if sc <= -2 else 'neutral')
+
+def to_list(series, dec=2):
+    return [
+        round(float(v), dec) if pd.notna(v) and not math.isnan(float(v)) else None
+        for v in series
+    ]
+
+# ── Fetch Data ─────────────────────────────────────────────────────────────────
+
+def fetch_ticker(sym):
+    tk = yf.Ticker(sym)
+    hist = tk.history(period='6mo')
+    if len(hist) < 30:
+        return sym, None, 'skip'
+
+    close = hist['Close']
+    vol   = hist['Volume']
+
+    cur    = float(close.iloc[-1])
+    prev   = float(close.iloc[-2])
+    pct    = (cur - prev) / prev * 100
+    cvol   = int(vol.iloc[-1])
+    avgvol = float(vol.tail(11).iloc[:-1].mean())
+    vratio = cvol / avgvol if avgvol else 1.0
+
+    rsi_s           = calc_rsi(close)
+    rsi             = float(rsi_s.iloc[-1]) if pd.notna(rsi_s.iloc[-1]) else 50.0
+    macd_s, sig_s, _ = calc_macd(close)
+    ma25            = close.rolling(25).mean()
+    ma75            = close.rolling(75).mean()
+    _, _, recent_gc, recent_dc = detect_crosses(ma25, ma75, 5)
+    ma25_last = float(ma25.iloc[-1]) if pd.notna(ma25.iloc[-1]) else None
+    ma75_last = float(ma75.iloc[-1]) if pd.notna(ma75.iloc[-1]) else None
+    ma_above  = bool(ma25_last and ma75_last and ma25_last > ma75_last)
+    status    = overall_status(rsi, ma25_last, ma75_last, pct)
+
+    # 会社名・52週高値・予想PER（辞書になければ API）
+    name = NAMES.get(sym)
+    w52h = None
+    fwd_pe = None
     try:
-        url = f"https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
-        r = requests.get(url, timeout=5)
-        items = re.findall(r'<title><!\[CDATA\[(.*?)\]\]></title>', r.text)
-        items = [i for i in items if ticker.upper() not in i.upper() or len(i) > 10]
-        results = []
-        for title in items[1:4]:
-            results.append({"title": title, "sentiment": sentiment(title)})
-        return results
-    except:
-        return []
+        info   = tk.info
+        if not name:
+            name = info.get('shortName') or sym
+        raw52h = info.get('fiftyTwoWeekHigh')
+        w52h   = round(float(raw52h), 2) if raw52h else None
+        raw_pe = info.get('forwardPE')
+        fwd_pe = round(float(raw_pe), 1) if raw_pe else None
+    except Exception:
+        if not name:
+            name = sym
 
-# ── 銘柄データ取得 ────────────────────────────────────
-def fetch_stock(ticker):
-    try:
-        tk = yf.Ticker(ticker)
-        hist = tk.history(period="6mo")
-        if hist.empty or len(hist) < MA_LONG:
-            hist = tk.history(period="1y")
-        if hist.empty:
-            return None
+    w52h_pct = round((cur - w52h) / w52h * 100, 1) if w52h else None
 
-        close = hist["Close"]
-        volume = hist["Volume"]
+    N    = 60
+    c60  = close.tail(N)
+    dates = c60.index.strftime('%m/%d').tolist()
 
-        # 価格・騰落率
-        current = close.iloc[-1]
-        prev = close.iloc[-2]
-        change = current - prev
-        change_pct = change / prev * 100
+    return sym, {
+        'ticker':   sym,
+        'name':     name,
+        'price':    round(cur, 2),
+        'pct':      round(pct, 2),
+        'volume':   cvol,
+        'avgvol':   int(avgvol),
+        'vratio':   round(vratio, 2),
+        'rsi':      round(rsi, 1),
+        'macd':     round(float(macd_s.iloc[-1]), 4),
+        'signal':   round(float(sig_s.iloc[-1]), 4),
+        'ma25':     round(ma25_last, 2) if ma25_last else None,
+        'ma75':     round(ma75_last, 2) if ma75_last else None,
+        'ma_above': ma_above,
+        'w52h':     w52h,
+        'w52h_pct': w52h_pct,
+        'fwd_pe':   fwd_pe,
+        'gc':       recent_gc,
+        'dc':       recent_dc,
+        'status':   status,
+        'news':     [],
+        'dates':    dates,
+        'prices':   to_list(c60, 2),
+        'ma25d':    to_list(ma25.tail(N), 2),
+        'ma75d':    to_list(ma75.tail(N), 2),
+        'macd_d':   to_list(macd_s.tail(N), 4),
+        'sig_d':    to_list(sig_s.tail(N), 4),
+    }, 'ok'
 
-        # 出来高
-        vol_today = volume.iloc[-1]
-        vol_avg10 = volume.rolling(10).mean().iloc[-1]
-        vol_spike = vol_today > vol_avg10 * VOL_SPIKE_RATIO
+INDICES_DEF = [
+    ('USD/JPY', 'USDJPY=X'),
+    ('DOW',     '^DJI'),
+    ('NDX',     '^NDX'),
+    ('SOX',     '^SOX'),
+    ('VIX',     '^VIX'),
+]
 
-        # RSI
-        rsi = calc_rsi(close)
+def fetch_index(label, sym):
+    tk  = yf.Ticker(sym)
+    h   = tk.history(period='5d')
+    if len(h) < 2:
+        return {'label': label, 'price': None, 'pct': 0}
+    cur  = float(h['Close'].iloc[-1])
+    prev = float(h['Close'].iloc[-2])
+    pct  = round((cur - prev) / prev * 100, 2)
+    # 表示フォーマット
+    if sym == 'USDJPY=X':
+        price_str = f'{cur:.2f}'
+    elif cur >= 1000:
+        price_str = f'{cur:,.0f}'
+    else:
+        price_str = f'{cur:.2f}'
+    return {'label': label, 'price': price_str, 'pct': pct}
 
-        # MACD
-        macd_line, signal_line, histogram = calc_macd(close)
+results = {}
+indices = []
+with ThreadPoolExecutor(max_workers=8) as ex:
+    # 銘柄
+    futures = {ex.submit(fetch_ticker, sym): sym for sym in TICKERS}
+    # 指数
+    idx_futures = {ex.submit(fetch_index, lbl, sym): lbl for lbl, sym in INDICES_DEF}
 
-        # MA
-        ma_short = close.rolling(MA_SHORT).mean()
-        ma_long = close.rolling(MA_LONG).mean()
-        ma_above = ma_short.iloc[-1] > ma_long.iloc[-1]
-
-        # クロス検出
-        recent_crosses, _ = detect_cross(ma_short.dropna(), ma_long.dropna())
-
-        # チャート用データ（直近CHART_DAYS日）
-        chart_close = close.tail(CHART_DAYS).tolist()
-        chart_ma25 = ma_short.tail(CHART_DAYS).tolist()
-        chart_ma75 = ma_long.tail(CHART_DAYS).tolist()
-        chart_dates = [str(d.date()) for d in close.tail(CHART_DAYS).index]
-
-        # MACD チャート用
-        chart_macd = macd_line.tail(CHART_DAYS).tolist()
-        chart_signal = signal_line.tail(CHART_DAYS).tolist()
-        chart_hist = histogram.tail(CHART_DAYS).tolist()
-
-        # クロスマーカー位置（チャート用インデックス）
-        cross_markers = []
-        offset = len(close) - CHART_DAYS
-        for c in recent_crosses:
-            chart_idx = c["idx"] - offset
-            if 0 <= chart_idx < CHART_DAYS:
-                cross_markers.append({"idx": chart_idx, "type": c["type"]})
-
-        # 総合判定
-        score = 0
-        if change_pct > 0: score += 1
-        if rsi < 70 and rsi > 30: score += 1
-        if ma_above: score += 1
-        if score >= 2: status = "bullish"
-        elif score == 1: status = "neutral"
-        else: status = "bearish"
-
-        # 最新クロスバッジ
-        badge = None
-        if recent_crosses:
-            badge = recent_crosses[-1]["type"]
-
-        info = tk.fast_info
-        name = ticker
+    for fut in as_completed(futures):
+        sym = futures[fut]
         try:
-            name = tk.info.get("shortName", ticker)
-        except:
-            pass
+            s, data, status = fut.result()
+            results[s] = (data, status)
+            print(f"  {s:8s} {status}")
+        except Exception as e:
+            results[sym] = (None, f'ERROR: {e}')
+            print(f"  {sym:8s} ERROR: {e}")
 
-        return {
-            "ticker": ticker,
-            "name": name,
-            "current": round(current, 2),
-            "change": round(change, 2),
-            "change_pct": round(change_pct, 2),
-            "volume": int(vol_today),
-            "vol_avg10": int(vol_avg10),
-            "vol_spike": vol_spike,
-            "rsi": round(rsi, 1),
-            "macd_val": round(macd_line.iloc[-1], 3),
-            "signal_val": round(signal_line.iloc[-1], 3),
-            "hist_val": round(histogram.iloc[-1], 3),
-            "ma_above": ma_above,
-            "badge": badge,
-            "status": status,
-            "chart_close": chart_close,
-            "chart_ma25": chart_ma25,
-            "chart_ma75": chart_ma75,
-            "chart_macd": chart_macd,
-            "chart_signal": chart_signal,
-            "chart_hist": chart_hist,
-            "chart_dates": chart_dates,
-            "cross_markers": cross_markers,
-            "news": fetch_news(ticker),
-        }
-    except Exception as e:
-        print(f"  ERROR {ticker}: {e}")
-        return None
+    for fut in as_completed(idx_futures):
+        lbl = idx_futures[fut]
+        try:
+            indices.append(fut.result())
+        except Exception as e:
+            indices.append({'label': lbl, 'price': None, 'pct': 0})
 
-# ── メイン ────────────────────────────────────────────
-def main():
-    tickers = [t.strip() for t in Path(WATCHLIST_FILE).read_text().splitlines() if t.strip()]
-    print(f"取得中... {len(tickers)}銘柄")
-    stocks = []
-    for t in tickers:
-        print(f"  {t}...", end=" ", flush=True)
-        d = fetch_stock(t)
-        if d:
-            stocks.append(d)
-            print("✓")
-        else:
-            print("✗")
+# 指数を定義順に並べ直す
+lbl_order = [lbl for lbl, _ in INDICES_DEF]
+indices.sort(key=lambda x: lbl_order.index(x['label']) if x['label'] in lbl_order else 99)
 
-    # 騰落率絶対値でソート
-    stocks.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
+stocks = [results[sym][0] for sym in TICKERS if results.get(sym, (None,))[0] is not None]
 
-    # HTML生成
-    html = build_html(stocks)
-    Path(OUTPUT_FILE).write_text(html, encoding="utf-8")
-    print(f"\n✅ {OUTPUT_FILE} 生成完了")
+# セクター順でソート（デフォルト表示順）
+SECTOR_ORDER = [
+    # テック大型
+    'NVDA', 'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'AVGO', 'TSLA', 'ORCL',
+    'AMD', 'INTC', 'NFLX', 'PLTR', 'QCOM', 'APP',
+    # 半導体・ハード
+    'MU', 'SNDK', 'NBIS', 'ARM', 'TSM', 'LITE', 'CRDO', 'LPTH',
+    # 金融・その他
+    'GS', 'KO', 'NU', 'OSCR',
+    # ETF
+    'SPY', 'QQQ', 'IWM', 'VT', 'SOXL',
+    # コモディティ
+    'SLV', 'COPX', 'GLD',
+]
+_sector_idx = {t: i for i, t in enumerate(SECTOR_ORDER)}
+stocks.sort(key=lambda s: _sector_idx.get(s['ticker'], len(SECTOR_ORDER)))
 
-def build_html(stocks):
-    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    stocks_json = json.dumps(stocks, ensure_ascii=False)
+QUOTES = [
+    '休むも相場',
+    '頭と尻尾はくれてやれ',
+    '落ちるナイフは掴むな',
+    '損小利大を心がけよ',
+    '総悲観は買い',
+    '買うは易し、売るは難し',
+    '市場は常に正しい',
+    'トレンドはあなたの友だ',
+    '上げ百日、下げ三日',
+    'もうはまだなり、まだはもうなり',
+    '価格はすべてを織り込む',
+    '良い投資家は退屈を楽しむ',
+    '靴磨きの少年が株の話を始めたら天井',
+    '相場に予測は禁物、対応あるのみ',
+    '最大の敵は市場ではなく自分自身だ',
+]
+daily_quote = random.choice(QUOTES)
 
-    return f"""<!DOCTYPE html>
+JST = timezone(timedelta(hours=9))
+now_str = datetime.now(JST).strftime('%Y-%m-%d %H:%M JST')
+stocks_json  = json.dumps(stocks,  ensure_ascii=False)
+indices_json = json.dumps(indices, ensure_ascii=False)
+
+# ── HTML Template ──────────────────────────────────────────────────────────────
+
+HTML = r"""<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Watchlist Dashboard</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Watchlist">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="favicon.png">
+<title>Watchlist</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-  :root {{
-    --bg: #0d0d0f;
-    --surface: #16161a;
-    --surface2: #1e1e24;
-    --border: #2a2a35;
-    --text: #e8e8f0;
-    --muted: #6b6b80;
-    --green: #22c55e;
-    --red: #ef4444;
-    --gold: #f59e0b;
-    --blue: #3b82f6;
-    --purple: #a855f7;
-  }}
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ background: var(--bg); color: var(--text); font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif; min-height: 100vh; }}
+/* ── Reset & Base ─────────────────────────────────────────────── */
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;overflow-x:hidden}
+body{background:#0d1117;color:#e6edf3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1.5;overflow-x:hidden;-webkit-overflow-scrolling:touch}
+a{color:#58a6ff;text-decoration:none}
+a:hover,a:focus{text-decoration:underline}
+button{cursor:pointer;font-family:inherit;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 
-  /* ヘッダー */
-  .header {{ padding: 20px 24px 12px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }}
-  .header h1 {{ font-size: 18px; font-weight: 700; letter-spacing: 0.05em; color: var(--text); }}
-  .header-meta {{ font-size: 11px; color: var(--muted); }}
-
-  /* ヒートマップ */
-  .heatmap-section {{ padding: 16px 24px; }}
-  .heatmap-title {{ font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; }}
-  .heatmap {{ display: flex; flex-wrap: wrap; gap: 4px; }}
-  .heatmap-cell {{
-    padding: 6px 10px; border-radius: 6px; font-size: 11px; font-weight: 600;
-    cursor: default; transition: transform 0.1s;
-    display: flex; flex-direction: column; align-items: center; gap: 1px;
-  }}
-  .heatmap-cell:hover {{ transform: scale(1.05); }}
-  .heatmap-cell .hm-ticker {{ font-size: 10px; font-weight: 700; }}
-  .heatmap-cell .hm-pct {{ font-size: 10px; }}
-
-  /* カードグリッド */
-  .cards-section {{ padding: 0 24px 40px; }}
-  .cards-grid {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }}
-
-  /* カード */
-  .card {{
-    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
-    overflow: hidden; transition: border-color 0.2s;
-  }}
-  .card:hover {{ border-color: #3a3a50; }}
-  .card.bullish {{ border-left: 3px solid var(--green); }}
-  .card.bearish {{ border-left: 3px solid var(--red); }}
-  .card.neutral {{ border-left: 3px solid var(--gold); }}
-
-  /* カードヘッダー */
-  .card-header {{ padding: 14px 16px 10px; display: flex; align-items: flex-start; justify-content: space-between; }}
-  .card-title {{ display: flex; flex-direction: column; gap: 2px; }}
-  .card-ticker {{ font-size: 15px; font-weight: 800; letter-spacing: 0.04em; }}
-  .card-name {{ font-size: 11px; color: var(--muted); max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-  .card-badges {{ display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }}
-  .badge {{ padding: 3px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; }}
-  .badge-gc {{ background: rgba(245,158,11,0.2); color: var(--gold); border: 1px solid rgba(245,158,11,0.4); }}
-  .badge-dc {{ background: rgba(100,100,120,0.3); color: #9ca3af; border: 1px solid rgba(100,100,120,0.4); }}
-  .badge-status {{ font-size: 9px; }}
-  .badge-fire {{ font-size: 13px; }}
-  .ma-indicator {{ font-size: 10px; color: var(--muted); }}
-
-  /* 価格エリア */
-  .price-area {{ padding: 0 16px 10px; display: flex; align-items: baseline; gap: 10px; }}
-  .price {{ font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }}
-  .change {{ font-size: 13px; font-weight: 600; }}
-  .up {{ color: var(--green); }}
-  .down {{ color: var(--red); }}
-
-  /* メトリクス */
-  .metrics {{ padding: 0 16px 10px; display: flex; gap: 16px; }}
-  .metric {{ display: flex; flex-direction: column; gap: 2px; }}
-  .metric-label {{ font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }}
-  .metric-value {{ font-size: 12px; font-weight: 600; }}
-
-  /* RSIゲージ */
-  .rsi-area {{ padding: 0 16px 10px; display: flex; align-items: center; gap: 12px; }}
-  .rsi-gauge-wrap {{ position: relative; width: 64px; height: 36px; flex-shrink: 0; }}
-  .rsi-gauge-wrap canvas {{ display: block; }}
-  .rsi-val {{ position: absolute; bottom: 0; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; white-space: nowrap; }}
-  .rsi-info {{ display: flex; flex-direction: column; gap: 2px; }}
-  .rsi-label {{ font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }}
-  .rsi-status {{ font-size: 11px; font-weight: 600; }}
-  .rsi-hot {{ color: var(--red); }}
-  .rsi-cold {{ color: var(--blue); }}
-  .rsi-normal {{ color: var(--muted); }}
-
-  /* チャート */
-  .chart-wrap {{ padding: 0 12px 8px; position: relative; height: 100px; }}
-  .chart-label {{ font-size: 9px; color: var(--muted); padding: 0 4px 2px; text-transform: uppercase; letter-spacing: 0.06em; }}
-  .macd-wrap {{ padding: 0 12px 10px; height: 60px; }}
-
-  /* ニュース */
-  .news-section {{ border-top: 1px solid var(--border); padding: 10px 16px 12px; }}
-  .news-title {{ font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }}
-  .news-item {{ display: flex; align-items: flex-start; gap: 6px; margin-bottom: 5px; }}
-  .news-sentiment {{ padding: 1px 5px; border-radius: 3px; font-size: 9px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }}
-  .sent-positive {{ background: rgba(34,197,94,0.2); color: var(--green); }}
-  .sent-negative {{ background: rgba(239,68,68,0.2); color: var(--red); }}
-  .sent-neutral {{ background: rgba(107,107,128,0.2); color: var(--muted); }}
-  .news-text {{ font-size: 11px; color: #c0c0d0; line-height: 1.4; }}
+/* ── Header ───────────────────────────────────────────────────── */
+.header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;padding-top:max(10px,env(safe-area-inset-top));padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right));border-bottom:1px solid #30363d;background:#161b22;position:-webkit-sticky;position:sticky;top:0;z-index:200;gap:8px}
+.header-left{display:flex;flex-direction:column;gap:2px;min-width:0}
+h1{font-size:17px;font-weight:700;color:#e6edf3;white-space:nowrap}
+.gen-time{font-size:10px;color:#8b949e}
+.header-right{display:flex;align-items:center;gap:6px;flex-shrink:0}
 
 
+/* ── Quote ────────────────────────────────────────────────────── */
+.quote-section{padding:8px 14px 4px;display:flex;align-items:center;gap:6px}
+.quote-mark{font-size:16px;color:#30363d;line-height:1;flex-shrink:0}
+.quote-text{font-size:11px;color:#8b949e;font-style:italic;letter-spacing:.3px}
 
-  @media (max-width: 600px) {{
-    .header {{ padding: 14px 16px 10px; }}
-    .heatmap-section, .cards-section {{ padding-left: 16px; padding-right: 16px; }}
-    .cards-grid {{ grid-template-columns: 1fr; }}
-  }}
+/* ── Memo ─────────────────────────────────────────────────────── */
+.memo-section{padding:4px 14px 6px}
+.memo-label{font-size:10px;color:#8b949e;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px}
+.memo-box{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:7px 10px;color:#e6edf3;font-size:12px;line-height:1.5;font-family:inherit;min-height:32px;outline:none;transition:border-color .2s;word-break:break-word;white-space:pre-wrap}
+.memo-box:focus{border-color:#58a6ff}
+.memo-box:empty::before{content:'...';color:#484f58;pointer-events:none}
+
+/* ── Heatmap ──────────────────────────────────────────────────── */
+.heatmap-section{padding:10px 14px 6px}
+.heatmap-section h2{font-size:10px;color:#8b949e;margin-bottom:7px;font-weight:600;text-transform:uppercase;letter-spacing:.6px}
+.heatmap{display:flex;flex-wrap:wrap;gap:3px}
+.hm-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;min-height:40px;border-radius:6px;font-size:11px;font-weight:700;padding:3px 5px;border:1px solid rgba(255,255,255,.08);transition:transform .12s;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;text-decoration:none;touch-action:manipulation}
+.heatmap:not(.idx-heatmap) .hm-cell{width:calc((100% - 30px) / 11);flex:none}
+.hm-cell:hover,.hm-cell:active{transform:scale(1.1);z-index:2}
+.hm-cell .hm-pct{font-size:9px;font-weight:400;margin-top:1px}
+.idx-heatmap{flex-wrap:nowrap;margin-bottom:0}
+.idx-heatmap .hm-cell{flex:1;min-width:0}
+.idx-heatmap .hm-price{font-size:9px;font-weight:400;margin-top:1px;opacity:.85}
+.idx-divider{height:1px;background:#30363d;margin:5px 0}
+
+/* ── Sort Bar ─────────────────────────────────────────────────── */
+.sort-bar{display:flex;align-items:center;gap:6px;padding:8px 14px 4px;flex-wrap:wrap}
+.sort-label{font-size:10px;color:#8b949e}
+.sort-btn{padding:7px 12px;border-radius:20px;font-size:11px;font-weight:600;border:1px solid #30363d;background:#1c2128;color:#8b949e;transition:all .12s;touch-action:manipulation}
+.sort-btn.active{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff}
+.sort-btn:active{opacity:.7}
+
+/* ── Cards ────────────────────────────────────────────────────── */
+.cards-section{padding:6px 14px;padding-bottom:max(40px,calc(env(safe-area-inset-bottom) + 24px))}
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,360px),1fr));gap:12px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden;scroll-margin-top:50px}
+.card:hover{border-color:#58a6ff44}
+
+.status-bar{height:4px;width:100%}
+.status-bar.bullish{background:linear-gradient(90deg,#238636,#2ea043)}
+.status-bar.bearish{background:linear-gradient(90deg,#da3633,#f85149)}
+.status-bar.neutral{background:linear-gradient(90deg,#9e6a03,#d29922)}
+.card-header{padding:10px 12px 5px}
+.ticker-row{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ticker{font-size:18px;font-weight:800;color:#e6edf3}
+.company-name{font-size:10px;color:#8b949e;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+
+/* Badges */
+.badge{display:inline-flex;align-items:center;gap:3px;padding:2px 6px;border-radius:20px;font-size:10px;font-weight:700}
+.badge-gc{background:#2d2500;color:#d4a017;border:1px solid #d4a017}
+.badge-dc{background:#1e1e1e;color:#8b949e;border:1px solid #6e7681}
+.badge-status{padding:2px 6px;border-radius:20px;font-size:10px;font-weight:600}
+.badge-bullish{background:#1a3824;color:#3fb950}
+.badge-bearish{background:#3d1a1a;color:#f85149}
+.badge-neutral{background:#2a2000;color:#d29922}
+.ma-badge{font-size:10px;padding:2px 6px;border-radius:4px;background:#1c2128;color:#8b949e;border:1px solid #30363d}
+
+
+/* Price / Volume */
+.price-row{display:flex;align-items:baseline;gap:10px;padding:0 12px 4px}
+.price{font-size:22px;font-weight:700;color:#e6edf3}
+.pct{font-size:14px;font-weight:700}
+.pct.up{color:#3fb950}
+.pct.down{color:#f85149}
+.vol-row{display:flex;align-items:center;flex-wrap:wrap;gap:5px;padding:0 12px 7px;font-size:11px;color:#8b949e}
+.vol-fire{font-size:12px}
+.divider{height:1px;background:#21262d;margin:0 12px}
+
+/* Stats */
+.summary-stats{display:flex;gap:7px;padding:5px 12px 7px;flex-wrap:wrap}
+.stat{display:flex;flex-direction:column;align-items:center;background:#1c2128;border-radius:6px;padding:4px 10px;min-width:54px}
+.stat-val{font-size:12px;font-weight:700;color:#e6edf3}
+.stat-lbl{font-size:9px;color:#8b949e;text-transform:uppercase;letter-spacing:.3px;margin-top:1px}
+
+/* Charts */
+.charts-row{display:flex;gap:8px;padding:8px 12px 6px}
+.gauge-wrap{display:flex;flex-direction:column;align-items:center;width:110px;flex-shrink:0}
+.gauge-label{font-size:10px;color:#8b949e;margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px}
+.gauge-status{font-size:9px;color:#8b949e;margin-top:2px;text-align:center}
+.price-chart-wrap{flex:1;min-height:120px;position:relative;min-width:0}
+.macd-wrap{padding:2px 12px 8px}
+.macd-label{font-size:10px;color:#8b949e;margin-bottom:3px;text-transform:uppercase;letter-spacing:.5px}
+.macd-chart-wrap{height:60px;position:relative}
+canvas{display:block}
+.gauge-wrap svg{width:100%;max-width:108px;height:auto;aspect-ratio:100/66}
+
+
+/* ── Tablet / Mobile ──────────────────────────────────────────── */
+@media(min-width:601px) and (max-width:900px){
+  .cards-grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:600px){
+  body{font-size:12px}
+  .header{padding:8px 12px;padding-top:max(8px,env(safe-area-inset-top));padding-left:max(12px,env(safe-area-inset-left));padding-right:max(12px,env(safe-area-inset-right))}
+  h1{font-size:15px}
+  .heatmap-section{padding:8px 10px 5px}
+  .hm-cell{min-height:37px;font-size:10px;padding:3px 4px;border-radius:5px}
+  .heatmap:not(.idx-heatmap) .hm-cell{width:calc((100% - 18px) / 7);flex:none}
+  .hm-cell .hm-pct{font-size:8px}
+  .sort-bar{padding:6px 10px 3px;gap:5px}
+  .cards-section{padding:5px 10px;padding-bottom:max(36px,calc(env(safe-area-inset-bottom) + 20px))}
+  .cards-grid{grid-template-columns:1fr;gap:10px}
+  .card{border-radius:8px}
+  .price{font-size:20px}
+  .ticker{font-size:16px}
+  .charts-row{padding:7px 10px 5px}
+  .gauge-wrap{width:100px}
+  .price-chart-wrap{min-height:115px}
+  .macd-chart-wrap{height:54px}
+  .divider{margin:0 10px}
+  .summary-stats,.vol-row,.price-row{padding-left:10px;padding-right:10px}
+  .macd-wrap{padding:2px 10px 7px}
+  .sort-btn{padding:8px 14px}
+}
+@media(max-width:375px){
+  .hm-cell{font-size:9px}
+  .ticker{font-size:15px}
+  .price{font-size:18px}
+  .gauge-wrap{width:90px}
+}
+/* ── Maintenance Panel ────────────────────────────────────────── */
+#maint-panel{position:fixed;inset:0;background:#0d1117;z-index:500;transform:translateX(100%);transition:transform .3s cubic-bezier(.4,0,.2,1);overflow-y:auto;-webkit-overflow-scrolling:touch}
+#maint-panel.open{transform:translateX(0)}
+.maint-hdr{display:flex;align-items:center;gap:10px;padding:max(14px,env(safe-area-inset-top)) 14px 14px;border-bottom:1px solid #30363d;position:sticky;top:0;background:#0d1117;z-index:1}
+.maint-back{background:none;border:none;color:#58a6ff;font-size:22px;cursor:pointer;padding:0 4px;line-height:1}
+.maint-title{font-size:16px;font-weight:700;color:#e6edf3;flex:1}
+.maint-sec{padding:16px 14px;border-bottom:1px solid #21262d}
+.maint-sec-lbl{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;font-weight:600}
+.maint-input{width:100%;background:#161b22;border:1px solid #30363d;border-radius:6px;padding:9px 10px;color:#e6edf3;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box}
+.maint-input:focus{border-color:#58a6ff}
+.maint-row{display:flex;gap:8px;margin-top:8px}
+.mbtn{padding:8px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;font-family:inherit;flex-shrink:0}
+.mbtn-primary{background:#238636;color:#fff}
+.mbtn-primary:disabled{opacity:.5;cursor:default}
+.mbtn-secondary{background:#1c2128;color:#e6edf3;border:1px solid #30363d}
+.mbtn-danger{background:none;border:none;color:#f85149;font-size:18px;cursor:pointer;padding:2px 8px;line-height:1}
+.ticker-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #21262d}
+.ticker-row:last-child{border-bottom:none}
+.ticker-row-name{font-size:14px;font-weight:600;color:#e6edf3}
+.maint-status{font-size:12px;color:#8b949e;margin-top:8px;min-height:16px}
+#maint-gear{background:none;border:none;color:#8b949e;font-size:18px;cursor:pointer;padding:2px;line-height:1;-webkit-tap-highlight-color:transparent}
+#maint-gear:hover{color:#e6edf3}
+
+/* ── Scroll to top ────────────────────────────────────────────── */
+#totop,#tobottom{position:fixed;right:16px;width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);color:#e6edf3;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:opacity .25s,background .2s;z-index:300;-webkit-tap-highlight-color:transparent}
+#totop{bottom:max(72px,calc(env(safe-area-inset-bottom) + 64px));opacity:0;pointer-events:none}
+#tobottom{bottom:max(24px,calc(env(safe-area-inset-bottom) + 16px));opacity:0;pointer-events:none}
+#totop.visible,#tobottom.visible{opacity:1;pointer-events:auto}
+#totop:hover,#tobottom:hover{background:rgba(255,255,255,.16)}
 </style>
 </head>
 <body>
 
+<!-- Header -->
 <div class="header">
-  <div>
-    <h1>📊 Watchlist</h1>
-    <div class="header-meta">更新: {generated_at}</div>
+  <div class="header-left">
+    <h1>📈 Watchlist</h1>
+    <span class="gen-time">Updated: <span id="gen-time"></span></span>
+  </div>
+  <div class="header-right">
+    <span id="stock-count" style="font-size:10px;color:#8b949e"></span>
+    <button id="maint-gear" onclick="openMaint()" aria-label="メンテナンス">⚙️</button>
   </div>
 </div>
 
+<!-- Maintenance Panel -->
+<div id="maint-panel">
+  <div class="maint-hdr">
+    <button class="maint-back" onclick="closeMaint()">‹</button>
+    <span class="maint-title">⚙️ メンテナンス</span>
+  </div>
+
+  <!-- Token section -->
+  <div class="maint-sec" id="maint-token-sec">
+    <div class="maint-sec-lbl">GitHub トークン</div>
+    <input class="maint-input" id="maint-token-input" type="password" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off" spellcheck="false">
+    <div class="maint-row">
+      <button class="mbtn mbtn-primary" onclick="saveToken()">保存</button>
+      <button class="mbtn mbtn-secondary" onclick="clearToken()">クリア</button>
+    </div>
+    <div class="maint-status" id="token-status"></div>
+  </div>
+
+  <!-- Ticker list section -->
+  <div class="maint-sec" id="maint-ticker-sec">
+    <div class="maint-sec-lbl">銘柄一覧 <span id="maint-ticker-count" style="color:#484f58"></span></div>
+    <div id="maint-ticker-list"></div>
+    <div class="maint-row" style="margin-top:14px">
+      <input class="maint-input" id="maint-add-input" type="text" placeholder="ティッカー追加（例：NVDA）" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" style="text-transform:uppercase" onkeydown="if(event.key==='Enter')addMaintTicker()">
+      <button class="mbtn mbtn-secondary" onclick="addMaintTicker()">追加</button>
+    </div>
+  </div>
+
+  <!-- Update section -->
+  <div class="maint-sec">
+    <button class="mbtn mbtn-primary" id="maint-update-btn" onclick="updateTickers()" style="width:100%">🔄 更新</button>
+  </div>
+</div>
+
+<!-- Quote of the day -->
+<div class="quote-section">
+  <span class="quote-mark">"</span>
+  <span class="quote-text">QUOTE_PLACEHOLDER</span>
+  <span class="quote-mark">"</span>
+</div>
+
+<!-- Memo -->
+<div class="memo-section">
+  <div class="memo-label">MEMO</div>
+  <div class="memo-box" id="memo" contenteditable="true" spellcheck="false"></div>
+</div>
+
+<!-- Heatmap -->
 <div class="heatmap-section">
-  <div class="heatmap-title">騰落率ヒートマップ</div>
+  <h2>Heatmap — Daily Change</h2>
+  <div class="heatmap idx-heatmap" id="idx-heatmap"></div>
+  <div class="idx-divider"></div>
   <div class="heatmap" id="heatmap"></div>
 </div>
 
+<!-- Sort Bar + Cards -->
+<div class="sort-bar">
+  <span class="sort-label">並び替え:</span>
+  <button class="sort-btn active" id="sort-sector" onclick="setSort('sector')">☰ セクター順</button>
+  <button class="sort-btn" id="sort-up"     onclick="setSort('up')">▲ 値上がり</button>
+  <button class="sort-btn" id="sort-down"   onclick="setSort('down')">▼ 値下がり</button>
+  <button class="sort-btn" id="sort-rsi"    onclick="setSort('rsi')">▲ RSI</button>
+</div>
+<button id="totop" onclick="window.scrollTo({top:0,behavior:'smooth'})" aria-label="トップへ戻る">▲</button>
+<button id="tobottom" onclick="window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'})" aria-label="一番下へ">▼</button>
+
 <div class="cards-section">
-  <div class="cards-grid" id="cardsGrid"></div>
+  <div class="cards-grid" id="cards"></div>
 </div>
 
+
 <script>
-const STOCKS = {stocks_json};
+const STOCKS  = STOCKS_JSON_PLACEHOLDER;
+const INDICES = INDICES_JSON_PLACEHOLDER;
+const GENERATED_AT = 'GENERATED_AT_PLACEHOLDER';
 
-// ── ヒートマップ ──────────────────────────────────────
-function buildHeatmap() {{
-  const container = document.getElementById('heatmap');
-  STOCKS.forEach(s => {{
-    const pct = s.change_pct;
-    const absMax = 10;
-    const intensity = Math.min(Math.abs(pct) / absMax, 1);
-    let bg, color;
-    if (pct > 0) {{
-      const g = Math.round(80 + intensity * 117);
-      bg = `rgba(34,${{g}},94,${{0.15 + intensity * 0.55}})`;
-      color = `rgb(34,${{g}},94)`;
-    }} else {{
-      const r = Math.round(180 + intensity * 75);
-      bg = `rgba(${{r}},68,68,${{0.15 + intensity * 0.55}})`;
-      color = `rgb(${{r}},68,68)`;
-    }}
+document.getElementById('gen-time').textContent = GENERATED_AT;
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+const LS = {
+  get: (k, def) => { try { return JSON.parse(localStorage.getItem(k) ?? 'null') ?? def; } catch { return def; } },
+  set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+let sortMode = LS.get('wl_sort', 'sector');
+if (!['sector','up','down','rsi'].includes(sortMode)) sortMode = 'sector';
+
+// ── Heatmap ───────────────────────────────────────────────────────────────────
+function pctToColor(pct) {
+  const t = Math.min(Math.abs(pct), 5) / 5;
+  return pct >= 0
+    ? `rgb(${Math.round(20+t*10)},${Math.round(56+t*100)},${Math.round(20+t*10)})`
+    : `rgb(${Math.round(100+t*155)},${Math.round(20+(1-t)*36)},${Math.round(20+(1-t)*36)})`;
+}
+
+function renderIndexHeatmap() {
+  const hm = document.getElementById('idx-heatmap');
+  hm.innerHTML = '';
+  INDICES.forEach(ix => {
     const cell = document.createElement('div');
-    cell.className = 'heatmap-cell';
-    cell.style.background = bg;
-    cell.style.color = color;
-    cell.innerHTML = `<span class="hm-ticker">${{s.ticker}}</span><span class="hm-pct">${{pct > 0 ? '+' : ''}}${{pct.toFixed(1)}}%</span>`;
-    container.appendChild(cell);
-  }});
-}}
+    cell.className = 'hm-cell';
+    cell.style.background = pctToColor(ix.pct);
+    cell.style.color = Math.abs(ix.pct) > 2 ? '#fff' : '#e6edf3';
+    const sign = ix.pct >= 0 ? '+' : '';
+    cell.innerHTML = `<span>${ix.label}</span><span class="hm-price">${ix.price ?? '—'}</span><span class="hm-pct">${sign}${ix.pct}%</span>`;
+    hm.appendChild(cell);
+  });
+}
 
-// ── RSIゲージ描画 ─────────────────────────────────────
-function drawRSIGauge(canvas, rsi) {{
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  ctx.clearRect(0, 0, w, h);
-  const cx = w / 2, cy = h - 2, r = h - 6;
-  const startAngle = Math.PI, endAngle = 0;
+function renderHeatmap(stocks) {
+  const hm = document.getElementById('heatmap');
+  hm.innerHTML = '';
+  stocks.forEach(s => {
+    const a = document.createElement('a');
+    a.className = 'hm-cell';
+    a.href = '#';
+    a.dataset.ticker = s.ticker;
+    a.style.background = pctToColor(s.pct);
+    a.style.color = Math.abs(s.pct) > 2 ? '#fff' : '#e6edf3';
+    a.title = `${s.name}  ${s.pct >= 0 ? '+' : ''}${s.pct}%`;
+    a.innerHTML = `<span>${s.ticker}</span><span class="hm-pct">${s.pct >= 0 ? '+' : ''}${s.pct}%</span>`;
+    a.addEventListener('click', e => {
+      e.preventDefault();
+      const card = document.getElementById(`card-${s.ticker}`);
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    hm.appendChild(a);
+  });
+}
 
-  // 背景弧
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, startAngle, endAngle);
-  ctx.strokeStyle = '#2a2a35';
-  ctx.lineWidth = 5;
-  ctx.stroke();
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function fmtVol(v) {
+  if (v >= 1e9) return (v/1e9).toFixed(1)+'B';
+  if (v >= 1e6) return (v/1e6).toFixed(1)+'M';
+  if (v >= 1e3) return (v/1e3).toFixed(0)+'K';
+  return String(v);
+}
 
-  // 値弧
-  const angle = Math.PI + (rsi / 100) * Math.PI;
-  let color = '#6b6b80';
-  if (rsi >= 70) color = '#ef4444';
-  else if (rsi <= 30) color = '#3b82f6';
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, startAngle, angle);
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 5;
-  ctx.lineCap = 'round';
-  ctx.stroke();
-}}
+function rsiGaugeSVG(rsi) {
+  const R=38,cx=50,cy=50;
+  const pt = d => [cx+R*Math.cos(d*Math.PI/180), cy-R*Math.sin(d*Math.PI/180)];
+  const [bx,by]=pt(126), [rx2,ry2]=pt(54);
+  const nRad=(1-rsi/100)*Math.PI;
+  const nx=(cx+30*Math.cos(nRad)).toFixed(1), ny=(cy-30*Math.sin(nRad)).toFixed(1);
+  const nc=rsi>=70?'#f85149':rsi<=30?'#388bfd':'#6e7681';
+  return `<svg viewBox="0 0 100 66" width="100" height="66" style="display:block;width:100%;max-width:108px">
+    <path d="M 12,${cy} A ${R},${R} 0 0,1 ${bx.toFixed(1)},${by.toFixed(1)}" stroke="#388bfd" stroke-width="7" fill="none"/>
+    <path d="M ${bx.toFixed(1)},${by.toFixed(1)} A ${R},${R} 0 0,1 ${rx2.toFixed(1)},${ry2.toFixed(1)}" stroke="#484f58" stroke-width="7" fill="none"/>
+    <path d="M ${rx2.toFixed(1)},${ry2.toFixed(1)} A ${R},${R} 0 0,1 88,${cy}" stroke="#f85149" stroke-width="7" fill="none"/>
+    <line x1="${cx}" y1="${cy}" x2="${nx}" y2="${ny}" stroke="${nc}" stroke-width="2.5" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="3.5" fill="#e6edf3"/>
+    <text x="${cx}" y="${cy+9}" text-anchor="middle" fill="#e6edf3" font-size="11" font-weight="bold">${rsi}</text>
+    <text x="9" y="${cy+12}" fill="#388bfd" font-size="7">0</text>
+    <text x="82" y="${cy+12}" fill="#f85149" font-size="7">100</text>
+  </svg>`;
+}
 
-// ── カード生成 ────────────────────────────────────────
-function buildCards() {{
-  const grid = document.getElementById('cardsGrid');
-  STOCKS.forEach((s, idx) => {{
+const GRID_COLOR='#21262d', TICK_COLOR='#6e7681', TIP_BG='#1c2128', TIP_BORDER='#30363d';
+const axisX = e => Object.assign({ticks:{color:TICK_COLOR,maxTicksLimit:6,font:{size:9}},grid:{color:GRID_COLOR}},e);
+const axisY = e => Object.assign({position:'right',ticks:{color:TICK_COLOR,font:{size:9}},grid:{color:GRID_COLOR}},e);
+const tipBase = () => ({backgroundColor:TIP_BG,borderColor:TIP_BORDER,borderWidth:1,titleColor:TICK_COLOR,bodyColor:'#e6edf3'});
+
+// ── Build card HTML ───────────────────────────────────────────────────────────
+function buildCard(s) {
+  const pctSign  = s.pct >= 0 ? '+' : '';
+  const pctClass = s.pct >= 0 ? 'up' : 'down';
+  const maColor  = s.ma_above ? '#3fb950' : '#f85149';
+  const maBadge  = (s.ma25 && s.ma75)
+    ? `<span class="ma-badge" style="color:${maColor}">${s.ma_above?'▲':'▼'} MA25 ${s.ma_above?'>':'<'} MA75</span>` : '';
+  let crossBadges = '';
+  if (s.gc) crossBadges += '<span class="badge badge-gc">🌟 GC</span>';
+  if (s.dc) crossBadges += '<span class="badge badge-dc">💀 DC</span>';
+  const statusLabels = {bullish:'🟢 強気',bearish:'🔴 弱気',neutral:'🟡 中立'};
+  const statusBadge  = `<span class="badge-status badge-${s.status}">${statusLabels[s.status]||'🟡 中立'}</span>`;
+  const volFire  = s.vratio >= 1.5 ? ' <span class="vol-fire">🔥</span>' : '';
+  const volColor = s.vratio >= 1.5 ? '#f0883e' : '#8b949e';
+  const volBold  = s.vratio >= 1.5 ? 700 : 400;
+  const w52Label  = s.w52h_pct != null
+    ? (s.w52h_pct >= 0 ? '🏆' : `${s.w52h_pct}%`)
+    : null;
+  const w52Color  = s.w52h_pct == null ? '#8b949e'
+    : s.w52h_pct >= -5  ? '#d4a017'
+    : s.w52h_pct >= -10 ? '#3fb950'
+    : '#8b949e';
+  const hasCharts = s.prices && s.prices.length > 0;
+
+  return `
+    <div class="status-bar ${s.status}"></div>
+    <div class="card-header">
+      <div class="ticker-row">
+        <span class="ticker">${s.ticker}</span>
+        ${statusBadge}${crossBadges}${maBadge}
+      </div>
+      <div class="company-name">${s.name}</div>
+    </div>
+    <div class="price-row">
+      <span class="price">$${(s.price||0).toLocaleString('en-US',{minimumFractionDigits:2})}</span>
+      <span class="pct ${pctClass}">${pctSign}${s.pct}%</span>
+    </div>
+    <div class="vol-row">
+      <span>Vol: <b>${fmtVol(s.volume||0)}</b>${volFire}</span>
+      <span style="color:#484f58">·</span>
+      <span>Avg10: ${fmtVol(s.avgvol||0)}</span>
+      <span style="color:#484f58">·</span>
+      <span style="color:${volColor};font-weight:${volBold}">${(s.vratio||0).toFixed(1)}×</span>
+    </div>
+    <div class="summary-stats">
+      ${s.ma25 ? `<div class="stat"><span class="stat-val">$${s.ma25}</span><span class="stat-lbl">MA25</span></div>` : ''}
+      ${s.ma75 ? `<div class="stat"><span class="stat-val">$${s.ma75}</span><span class="stat-lbl">MA75</span></div>` : ''}
+      ${w52Label ? `<div class="stat"><span class="stat-val" style="color:${w52Color}">${w52Label}</span><span class="stat-lbl">52W High</span></div>` : ''}
+      <div class="stat"><span class="stat-val">${s.fwd_pe != null ? s.fwd_pe : 'N/A'}</span><span class="stat-lbl">Fwd PE</span></div>
+    </div>
+    <div class="divider"></div>
+    ${hasCharts ? `
+    <div class="charts-row">
+      <div class="gauge-wrap">
+        <div class="gauge-label">RSI(14)</div>
+        ${rsiGaugeSVG(s.rsi||50)}
+        <div class="gauge-status">${(s.rsi||50)>=70?'⚠️ Overbought':(s.rsi||50)<=30?'⚠️ Oversold':'Normal'}</div>
+      </div>
+      <div class="price-chart-wrap"><canvas id="pc-${s.ticker}"></canvas></div>
+    </div>
+    <div class="macd-wrap">
+      <div class="macd-label">MACD (12/26/9) — Line &amp; Signal</div>
+      <div class="macd-chart-wrap"><canvas id="mc-${s.ticker}"></canvas></div>
+    </div>` : ''}`;
+}
+
+// ── Render all cards ──────────────────────────────────────────────────────────
+let ioRef = null;
+
+function getVisibleStocks() {
+  const all = [...STOCKS];
+  if (sortMode === 'up')   return [...all].sort((a,b) => b.pct - a.pct);
+  if (sortMode === 'down') return [...all].sort((a,b) => a.pct - b.pct);
+  if (sortMode === 'rsi')  return [...all].sort((a,b) => (b.rsi||0) - (a.rsi||0));
+  return all; // sector order = STOCKS array order
+}
+
+function renderAll() {
+  if (ioRef) ioRef.disconnect();
+
+  const visible = getVisibleStocks();
+  document.getElementById('stock-count').textContent = visible.length + ' stocks';
+
+  renderIndexHeatmap();
+  renderHeatmap(visible);
+
+  const grid = document.getElementById('cards');
+  grid.innerHTML = '';
+  visible.forEach(s => {
     const card = document.createElement('div');
-    card.className = `card ${{s.status}}`;
-
-    const updown = s.change >= 0 ? 'up' : 'down';
-    const sign = s.change >= 0 ? '+' : '';
-    const maIcon = s.ma_above ? '↑MA上' : '↓MA下';
-    const maColor = s.ma_above ? '#22c55e' : '#ef4444';
-
-    let badges = '';
-    if (s.badge === 'GC') badges += `<span class="badge badge-gc">🌟 GC</span>`;
-    if (s.badge === 'DC') badges += `<span class="badge badge-dc">💀 DC</span>`;
-    if (s.vol_spike) badges += `<span class="badge-fire">🔥</span>`;
-
-    const statusEmoji = s.status === 'bullish' ? '🟢' : s.status === 'bearish' ? '🔴' : '🟡';
-    const statusLabel = s.status === 'bullish' ? '強気' : s.status === 'bearish' ? '弱気' : '中立';
-
-    const rsiClass = s.rsi >= 70 ? 'rsi-hot' : s.rsi <= 30 ? 'rsi-cold' : 'rsi-normal';
-    const rsiLabel = s.rsi >= 70 ? '過熱' : s.rsi <= 30 ? '売られ過ぎ' : '通常';
-
-    const volRatio = s.vol_avg10 > 0 ? (s.volume / s.vol_avg10).toFixed(1) : '-';
-
-    const newsHtml = s.news.map(n => {{
-      const sc = n.sentiment === 'positive' ? 'sent-positive' : n.sentiment === 'negative' ? 'sent-negative' : 'sent-neutral';
-      const sl = n.sentiment === 'positive' ? 'POS' : n.sentiment === 'negative' ? 'NEG' : 'NEU';
-      return `<div class="news-item"><span class="news-sentiment ${{sc}}">${{sl}}</span><span class="news-text">${{n.title}}</span></div>`;
-    }}).join('');
-
-    card.innerHTML = `
-      <div class="card-header">
-        <div class="card-title">
-          <span class="card-ticker">${{s.ticker}}</span>
-          <span class="card-name">${{s.name}}</span>
-        </div>
-        <div class="card-badges">
-          ${{badges}}
-          <span class="badge badge-status">${{statusEmoji}} ${{statusLabel}}</span>
-          <span class="ma-indicator" style="color:${{maColor}}">${{maIcon}}</span>
-        </div>
-      </div>
-      <div class="price-area">
-        <span class="price">$${{s.current.toLocaleString()}}</span>
-        <span class="change ${{updown}}">${{sign}}${{s.change}} (${{sign}}${{s.change_pct}}%)</span>
-      </div>
-      <div class="rsi-area">
-        <div class="rsi-gauge-wrap">
-          <canvas id="rsi-${{idx}}" width="64" height="36"></canvas>
-          <span class="rsi-val">${{s.rsi}}</span>
-        </div>
-        <div class="rsi-info">
-          <span class="rsi-label">RSI 14</span>
-          <span class="rsi-status ${{rsiClass}}">${{rsiLabel}}</span>
-        </div>
-        <div class="metrics" style="margin-left:auto">
-          <div class="metric">
-            <span class="metric-label">出来高比</span>
-            <span class="metric-value" style="color:${{s.vol_spike ? '#f59e0b' : 'inherit'}}">${{volRatio}}x</span>
-          </div>
-          <div class="metric">
-            <span class="metric-label">MACD</span>
-            <span class="metric-value" style="color:${{s.hist_val >= 0 ? '#22c55e' : '#ef4444'}}">${{s.hist_val > 0 ? '+' : ''}}${{s.hist_val}}</span>
-          </div>
-        </div>
-      </div>
-      <div class="chart-label">価格 / MA25 / MA75</div>
-      <div class="chart-wrap"><canvas id="price-${{idx}}"></canvas></div>
-      <div class="chart-label">MACD</div>
-      <div class="macd-wrap"><canvas id="macd-${{idx}}"></canvas></div>
-      ${{s.news.length > 0 ? `<div class="news-section"><div class="news-title">最新ニュース</div>${{newsHtml}}</div>` : ''}}
-    `;
+    card.className = 'card';
+    card.id = `card-${s.ticker}`;
+    card.dataset.pct = s.pct;
+    card.dataset.ticker = s.ticker;
+    card.innerHTML = buildCard(s);
     grid.appendChild(card);
-  }});
+  });
 
-  // チャート描画
-  STOCKS.forEach((s, idx) => {{
-    drawRSIGauge(document.getElementById(`rsi-${{idx}}`), s.rsi);
-    drawPriceChart(idx, s);
-    drawMACDChart(idx, s);
-  }});
-}}
+  ioRef = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const ticker = entry.target.dataset.ticker;
+      const s = STOCKS.find(x => x.ticker === ticker);
+      if (s) { renderPriceChart(s); renderMacdChart(s); }
+      ioRef.unobserve(entry.target);
+    });
+  }, { rootMargin: '300px 0px' });
 
-function drawPriceChart(idx, s) {{
-  const ctx = document.getElementById(`price-${{idx}}`).getContext('2d');
-  const labels = s.chart_dates;
+  grid.querySelectorAll('.card').forEach(c => ioRef.observe(c));
+}
 
-  // クロスマーカー用ポイント配列
-  const gcPoints = s.chart_close.map((v, i) => {{
-    const m = s.cross_markers.find(c => c.idx === i && c.type === 'GC');
-    return m ? v : null;
-  }});
-  const dcPoints = s.chart_close.map((v, i) => {{
-    const m = s.cross_markers.find(c => c.idx === i && c.type === 'DC');
-    return m ? v : null;
-  }});
+// ── Charts ────────────────────────────────────────────────────────────────────
+function renderPriceChart(s) {
+  const cv = document.getElementById(`pc-${s.ticker}`);
+  if (!cv || cv._rendered || !s.prices?.length) return;
+  cv._rendered = true;
+  const datasets = [
+    {label:'Price', data:s.prices, borderColor:'#58a6ff', borderWidth:1.5, pointRadius:0, tension:0.2, fill:false, order:3},
+    {label:'MA25',  data:s.ma25d,  borderColor:'#d4a017', borderWidth:1.2, pointRadius:0, tension:0.3, fill:false, order:2},
+    {label:'MA75',  data:s.ma75d,  borderColor:'#8b949e', borderWidth:1,   borderDash:[4,2], pointRadius:0, tension:0.3, fill:false, order:1},
+  ];
+  const pc = new Chart(cv, {
+    type:'line', data:{labels:s.dates, datasets},
+    options:{responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{legend:{display:false}, tooltip:Object.assign(tipBase(),{mode:'index',intersect:false,callbacks:{label:ctx=>`${ctx.dataset.label}: $${ctx.parsed.y??''}`}})},
+      scales:{x:axisX(), y:axisY()}},
+  });
+  cv.addEventListener('touchend', () => { pc.tooltip.setActiveElements([], {}); pc.update('none'); }, {passive:true});
+}
 
-  new Chart(ctx, {{
-    type: 'line',
-    data: {{
-      labels,
-      datasets: [
-        {{
-          label: '価格', data: s.chart_close,
-          borderColor: '#6b7cff', borderWidth: 1.5, pointRadius: 0, tension: 0.3,
-          fill: {{ target: 'origin', above: 'rgba(107,124,255,0.04)' }}
-        }},
-        {{
-          label: 'MA25', data: s.chart_ma25,
-          borderColor: '#f59e0b', borderWidth: 1, pointRadius: 0, tension: 0.3,
-          borderDash: []
-        }},
-        {{
-          label: 'MA75', data: s.chart_ma75,
-          borderColor: '#a855f7', borderWidth: 1, pointRadius: 0, tension: 0.3,
-          borderDash: [4, 3]
-        }},
-        {{
-          label: 'GC', data: gcPoints,
-          borderColor: 'transparent', backgroundColor: '#f59e0b',
-          pointRadius: 6, pointStyle: 'triangle', showLine: false
-        }},
-        {{
-          label: 'DC', data: dcPoints,
-          borderColor: 'transparent', backgroundColor: '#9ca3af',
-          pointRadius: 6, pointStyle: 'triangle', rotation: 180, showLine: false
-        }},
-      ]
-    }},
-    options: {{
-      responsive: true, maintainAspectRatio: false, animation: false,
-      plugins: {{
-        legend: {{ display: false }},
-        annotation: {{}}
-      }},
-      scales: {{
-        x: {{ display: false }},
-        y: {{
-          display: true, position: 'right',
-          grid: {{ color: '#1e1e24' }},
-          ticks: {{ color: '#6b6b80', font: {{ size: 9 }}, maxTicksLimit: 4,
-            callback: v => '$' + v.toLocaleString() }}
-        }}
-      }}
-    }}
-  }});
-}}
+function renderMacdChart(s) {
+  const cv = document.getElementById(`mc-${s.ticker}`);
+  if (!cv || cv._rendered || !s.macd_d?.length) return;
+  cv._rendered = true;
+  const mc = new Chart(cv, {
+    type:'line',
+    data:{labels:s.dates, datasets:[
+      {label:'MACD',   data:s.macd_d, borderColor:'#58a6ff', borderWidth:1.5, pointRadius:0, tension:0.2, fill:false, order:1},
+      {label:'Signal', data:s.sig_d,  borderColor:'#f0883e', borderWidth:1.2, borderDash:[3,2], pointRadius:0, tension:0.2, fill:false, order:2},
+    ]},
+    options:{responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{legend:{display:false}, tooltip:Object.assign(tipBase(),{mode:'index',intersect:false})},
+      scales:{x:axisX({ticks:{display:false}}), y:axisY({ticks:{maxTicksLimit:3,font:{size:8}}})}},
+  });
+  cv.addEventListener('touchend', () => { mc.tooltip.setActiveElements([], {}); mc.update('none'); }, {passive:true});
+}
 
-function drawMACDChart(idx, s) {{
-  const ctx = document.getElementById(`macd-${{idx}}`).getContext('2d');
-  const histColors = s.chart_hist.map(v => v >= 0 ? 'rgba(34,197,94,0.7)' : 'rgba(239,68,68,0.7)');
+// ── Sort ──────────────────────────────────────────────────────────────────────
+function setSort(mode) {
+  sortMode = mode;
+  LS.set('wl_sort', mode);
+  ['sector','up','down','rsi'].forEach(m => {
+    document.getElementById(`sort-${m}`).classList.toggle('active', m === mode);
+  });
+  renderAll();
+}
 
-  new Chart(ctx, {{
-    type: 'bar',
-    data: {{
-      labels: s.chart_dates,
-      datasets: [
-        {{
-          type: 'bar', label: 'Histogram', data: s.chart_hist,
-          backgroundColor: histColors, borderWidth: 0
-        }},
-        {{
-          type: 'line', label: 'MACD', data: s.chart_macd,
-          borderColor: '#3b82f6', borderWidth: 1.2, pointRadius: 0, tension: 0.3
-        }},
-        {{
-          type: 'line', label: 'Signal', data: s.chart_signal,
-          borderColor: '#f59e0b', borderWidth: 1, pointRadius: 0, tension: 0.3,
-          borderDash: [3, 2]
-        }},
-      ]
-    }},
-    options: {{
-      responsive: true, maintainAspectRatio: false, animation: false,
-      plugins: {{ legend: {{ display: false }} }},
-      scales: {{
-        x: {{ display: false }},
-        y: {{ display: false }}
-      }}
-    }}
-  }});
-}}
+// ── Init ──────────────────────────────────────────────────────────────────────
+// ページロード時にハッシュを消してトップに戻る
+history.replaceState(null, '', window.location.pathname);
+window.scrollTo(0, 0);
 
-// ── 初期化 ────────────────────────────────────────────
-buildHeatmap();
-buildCards();
+document.getElementById(`sort-${sortMode}`)?.classList.add('active');
+['sector','up','down'].filter(m=>m!==sortMode).forEach(m=>document.getElementById(`sort-${m}`)?.classList.remove('active'));
+
+renderAll();
+
+// Memo
+const memoEl = document.getElementById('memo');
+memoEl.textContent = localStorage.getItem('wl_memo') || '';
+memoEl.addEventListener('input', () => localStorage.setItem('wl_memo', memoEl.textContent));
+
+// ── Maintenance ──────────────────────────────────────────────────────────────
+const REPO = 'kirevantolix/dashboard';
+const FILE_PATH = 'tickers.txt';
+const BRANCH = 'main';
+let _tickers = [];
+
+function openMaint() {
+  document.getElementById('maint-panel').classList.add('open');
+  _initMaint();
+}
+function closeMaint() {
+  document.getElementById('maint-panel').classList.remove('open');
+}
+
+function _initMaint() {
+  const token = localStorage.getItem('wl_token') || '';
+  const tokenInput = document.getElementById('maint-token-input');
+  tokenInput.value = token ? '●'.repeat(16) : '';
+  document.getElementById('token-status').textContent = token ? '✅ トークン保存済み' : '';
+  if (token) _loadTickers();
+  else { document.getElementById('maint-ticker-list').innerHTML = ''; _updateCount(); }
+}
+
+function saveToken() {
+  const v = document.getElementById('maint-token-input').value.trim();
+  if (!v || v.startsWith('●')) return;
+  localStorage.setItem('wl_token', v);
+  document.getElementById('token-status').textContent = '✅ 保存しました';
+  document.getElementById('maint-token-input').value = '●'.repeat(16);
+  _loadTickers();
+}
+function clearToken() {
+  localStorage.removeItem('wl_token');
+  document.getElementById('maint-token-input').value = '';
+  document.getElementById('token-status').textContent = 'トークンを削除しました';
+  document.getElementById('maint-ticker-list').innerHTML = '';
+  _tickers = []; _updateCount();
+}
+
+async function _loadTickers() {
+  const token = localStorage.getItem('wl_token');
+  if (!token) return;
+  const list = document.getElementById('maint-ticker-list');
+  list.innerHTML = '<div style="color:#8b949e;font-size:13px;padding:8px 0">読み込み中...</div>';
+  try {
+    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}&t=${Date.now()}`, {
+      headers: {'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json'}
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const content = atob(data.content.replace(/\s/g, ''));
+    _tickers = content.split('\n').filter(t => t.trim());
+    localStorage.setItem('wl_fcode', _tickers.join(','));
+    _renderTickers();
+  } catch(e) {
+    list.innerHTML = `<div style="color:#f85149;font-size:13px">読み込みエラー: ${e.message}</div>`;
+  }
+}
+
+function _renderTickers() {
+  const list = document.getElementById('maint-ticker-list');
+  list.innerHTML = '';
+  _tickers.forEach((t, i) => {
+    const row = document.createElement('div');
+    row.className = 'ticker-row';
+    row.innerHTML = `<span class="ticker-row-name">${t}</span><button class="mbtn-danger" onclick="_deleteTicker(${i})">✕</button>`;
+    list.appendChild(row);
+  });
+  _updateCount();
+}
+function _updateCount() {
+  document.getElementById('maint-ticker-count').textContent = _tickers.length ? `(${_tickers.length})` : '';
+}
+function _deleteTicker(i) {
+  _tickers.splice(i, 1);
+  _renderTickers();
+}
+function addMaintTicker() {
+  const inp = document.getElementById('maint-add-input');
+  const t = inp.value.trim().toUpperCase();
+  if (!t) return;
+  if (_tickers.includes(t)) { alert(`${t} はすでに追加されています`); return; }
+  _tickers.push(t);
+  inp.value = '';
+  _renderTickers();
+}
+
+async function updateTickers() {
+  const token = localStorage.getItem('wl_token');
+  if (!token) { alert('トークンが未設定です'); return; }
+  if (_tickers.length === 0) { alert('銘柄が0件です'); return; }
+
+  const btn = document.getElementById('maint-update-btn');
+  const origText = btn.textContent;
+  btn.disabled = true;
+
+  try {
+    // ════════════════════════════════════════════════════
+    // STEP 1: tickers.txt の現在のSHAを取得
+    // ════════════════════════════════════════════════════
+    btn.textContent = '[1/3] SHA取得中...';
+    console.log('[maint] STEP1 開始: tickers.txt の SHA を取得');
+
+    const getRes = await fetch(
+      `https://api.github.com/repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}&t=${Date.now()}`,
+      { headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github.v3+json' } }
+    );
+    const getData = await getRes.json();
+    console.log('[maint] STEP1 完了: status =', getRes.status, '/ sha =', getData.sha);
+
+    if (getRes.status !== 200) {
+      throw new Error(`SHA取得失敗 (${getRes.status}): ${getData.message || ''}`);
+    }
+    const sha = getData.sha;
+
+    // ════════════════════════════════════════════════════
+    // STEP 2: tickers.txt を新しい内容で上書き（PUTリクエスト）
+    //         ★ この完了を確認してからSTEP3へ進む ★
+    // ════════════════════════════════════════════════════
+    btn.textContent = '[2/3] tickers.txt 書き込み中...';
+    const rawContent = _tickers.join('\n') + '\n';
+    console.log('[maint] STEP2 開始: tickers.txt を書き込み');
+    console.log('[maint]   SHA    :', sha);
+    console.log('[maint]   内容   :\n' + rawContent);
+
+    const putRes = await fetch(`https://api.github.com/repos/${REPO}/contents/${FILE_PATH}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: 'Update tickers via dashboard',
+        content: btoa(rawContent),
+        sha: sha,
+        branch: BRANCH
+      })
+    });
+    // ★ PUT のレスポンスを完全に受け取ってから判定
+    const putData = await putRes.json();
+    console.log('[maint] STEP2 完了: status =', putRes.status);
+    console.log('[maint]   新SHA :', putData.content?.sha);
+    console.log('[maint]   レスポンス全体:', putData);
+
+    if (putRes.status !== 200 && putRes.status !== 201) {
+      throw new Error(`書き込み失敗 (${putRes.status}): ${putData.message || JSON.stringify(putData)}`);
+    }
+
+    // ════════════════════════════════════════════════════
+    // STEP 3: tickers.txt の書き込み完了を確認後にActions起動
+    //         ★ 必ずSTEP2成功後にここへ到達 ★
+    // ════════════════════════════════════════════════════
+    btn.textContent = '[3/3] Actions起動中...';
+    console.log('[maint] STEP3 開始: tickers.txt 書き込み完了を確認 → Actions起動');
+
+    const dispRes = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/update.yml/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ref: BRANCH })
+    });
+    console.log('[maint] STEP3 完了: dispatch status =', dispRes.status);
+
+    if (dispRes.status !== 204) {
+      const dispData = await dispRes.json().catch(() => ({}));
+      console.warn('[maint] dispatch 異常レスポンス:', dispData);
+    }
+
+    alert('更新しました');
+  } catch (e) {
+    console.error('[maint] エラー:', e);
+    alert('エラー: ' + e.message);
+  }
+
+  btn.textContent = origText;
+  btn.disabled = false;
+}
+
+// トップへ戻るボタン
+const toTopBtn = document.getElementById('totop');
+const toBotBtn = document.getElementById('tobottom');
+window.addEventListener('scroll', () => {
+  const scrolled = window.scrollY > 300;
+  toTopBtn.classList.toggle('visible', scrolled);
+  toBotBtn.classList.toggle('visible', scrolled);
+}, {passive: true});
 </script>
 </body>
-</html>"""
+</html>
+"""
 
-if __name__ == "__main__":
-    main()
+HTML = HTML.replace('STOCKS_JSON_PLACEHOLDER',  stocks_json)
+HTML = HTML.replace('INDICES_JSON_PLACEHOLDER', indices_json)
+HTML = HTML.replace('GENERATED_AT_PLACEHOLDER', now_str)
+HTML = HTML.replace('QUOTE_PLACEHOLDER', daily_quote)
+
+with open('dashboard.html', 'w', encoding='utf-8') as f:
+    f.write(HTML)
+
+kb = len(HTML) // 1024
+print(f"\n✅  Generated dashboard.html  ({kb} KB, {len(stocks)} stocks)")
